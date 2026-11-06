@@ -19,8 +19,7 @@ jobs:
 
       - name: Instalar herramientas Android
         run: |
-          SDKMANAGER="$ANDROID_HOME/cmdline-tools/16.0/bin/sdkmanager"
-          "$SDKMANAGER" --install "platforms;android-35" "build-tools;35.0.0"
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager -print -quit)"roid-35" "build-tools;35.0.0"
 
       - name: Preparar Gradle
         uses: gradle/actions/setup-gradle@v4
