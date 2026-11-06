@@ -30,7 +30,7 @@ jobs:
 
       - name: Descomprimir proyecto
         run: |
-          unzip -q mis-cuentas-android.zip -d .
+          unzip -q mis-cuentas-android-corregido.zip -d .
           test -f app/build.gradle
 
       - name: Compilar APK
