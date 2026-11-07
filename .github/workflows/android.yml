@@ -1,4 +1,5 @@
 
+
 name: Crear APK Android
 
 on:
@@ -21,14 +22,14 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17' 
-  
+          java-version: '17'
+
       - name: Preparar Android SDK
         uses: android-actions/setup-android@v3
         with:
-            packages: 'platform-tools'
+          packages: 'platform-tools'
 
-     - name: Instalar paquetes Android
+      - name: Instalar paquetes Android
         run: sdkmanager 'platform-tools' 'platforms;android-35' 'build-tools;35.0.0'
 
       - name: Preparar Gradle
