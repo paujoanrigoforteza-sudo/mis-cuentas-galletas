@@ -39,7 +39,7 @@ jobs:
 
       - name: Descomprimir proyecto
         run: |
-          unzip -q MisCuentas-1.1.3-saldo-a-favor.zip -d .
+          unzip -q MisCuentas-1.1.4-correcciones.zip -d .
           test -f miscuentas_work/app/build.gradle
           test -f miscuentas_work/settings.gradle
 
