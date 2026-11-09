@@ -1,4 +1,5 @@
-name: Build MisCuentas 1.9.11
+
+name: Build MisCuentas 1.9.12
 
 on:
   workflow_dispatch:
@@ -44,44 +45,39 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
-          if [ -f "app/build.gradle" ]; then
+          if [ -f "$GITHUB_WORKSPACE/app/build.gradle" ]; then
             PROJECT="$GITHUB_WORKSPACE"
           else
-            ZIP_FILE="$(find "$GITHUB_WORKSPACE" -type f -name 'MisCuentas_1.9.11_con_sonido.zip' -print -quit)"
-            if [ -z "$ZIP_FILE" ]; then
-              echo "::error::No encuentro MisCuentas_1.9.11_con_sonido.zip en el repositorio."
+            ZIP_FILE="$GITHUB_WORKSPACE/MisCuentas_1.9.12.zip"
+            if [ ! -f "$ZIP_FILE" ]; then
+              echo "::error::No encuentro MisCuentas_1.9.12.zip en la raíz del repositorio."
               exit 1
             fi
-
             mkdir -p "$RUNNER_TEMP/miscuentas-src"
             unzip -q "$ZIP_FILE" -d "$RUNNER_TEMP/miscuentas-src"
-            PROJECT="$(find "$RUNNER_TEMP/miscuentas-src" -type f -path '*/app/build.gradle' -print -quit | sed 's#/app/build.gradle$##')"
-
-            if [ -z "$PROJECT" ]; then
-              echo "::error::El ZIP no contiene un proyecto Android válido (app/build.gradle)."
+            mapfile -t PROJECT_FILES < <(find "$RUNNER_TEMP/miscuentas-src" -type f -path '*/app/build.gradle' -print)
+            if [ "${#PROJECT_FILES[@]}" -ne 1 ]; then
+              echo "::error::El ZIP debe contener exactamente un app/build.gradle; encontrados: ${#PROJECT_FILES[@]}"
               exit 1
             fi
+            PROJECT="${PROJECT_FILES[0]%/app/build.gradle}"
           fi
-
           echo "PROJECT_DIR=$PROJECT" >> "$GITHUB_ENV"
           echo "Proyecto localizado en: $PROJECT"
 
-      - name: Validar versión y JavaScript
+      - name: Validar versión, JavaScript y sonido
         shell: bash
         run: |
           set -euo pipefail
           cd "$PROJECT_DIR"
-
-          grep -Eq 'versionCode[[:space:]]+37([[:space:]]|$)' app/build.gradle || {
-            echo "::error::versionCode no es 37 en app/build.gradle"
+          grep -Eq 'versionCode[[:space:]]+38([[:space:]]|$)' app/build.gradle || {
+            echo "::error::versionCode no es 38 en app/build.gradle"
             exit 1
           }
-          grep -Eq 'versionName[[:space:]]+"1\\.9\\.11"' app/build.gradle || {
-            echo "::error::versionName no es 1.9.11 en app/build.gradle"
+          grep -Fq 'versionName "1.9.12"' app/build.gradle || {
+            echo "::error::versionName no es 1.9.12 en app/build.gradle"
             exit 1
           }
-
           python3 - <<'PY'
           import re
           path = 'app/src/main/assets/index.html'
@@ -90,18 +86,16 @@ jobs:
           scripts = re.findall(r'<script[^>]*>(.*?)</script>', html, re.S | re.I)
           if not scripts:
               raise SystemExit('No se encontraron scripts JavaScript en index.html')
-          with open('/tmp/miscuentas-1.9.11.js', 'w', encoding='utf-8') as f:
+          with open('/tmp/miscuentas-1.9.12.js', 'w', encoding='utf-8') as f:
               f.write('\n'.join(scripts))
           PY
-
-          node --check /tmp/miscuentas-1.9.11.js
-
+          node --check /tmp/miscuentas-1.9.12.js
           test -f app/src/main/assets/sounds/reclamar_carga.mp3 || {
             echo "::error::Falta el sonido local reclamar_carga.mp3"
             exit 1
           }
 
-      - name: Compilar APK 1.9.11
+      - name: Compilar APK 1.9.12
         shell: bash
         run: |
           set -euo pipefail
@@ -112,12 +106,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cp "$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk" "$GITHUB_WORKSPACE/MisCuentas-1.9.11-v37.apk"
+          cp "$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk" "$GITHUB_WORKSPACE/MisCuentas-1.9.12-v38.apk"
 
       - name: Publicar APK con nombre de versión
         uses: actions/upload-artifact@v4
         with:
-          name: MisCuentas-1.9.11-v37
-          path: MisCuentas-1.9.11-v37.apk
+          name: MisCuentas-1.9.12-v38
+          path: MisCuentas-1.9.12-v38.apk
           if-no-files-found: error
           
