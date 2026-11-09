@@ -1,4 +1,4 @@
-name: Build MisCuentas 1.9.1
+name: Build MisCuentas 1.9.2
 
 on:
   workflow_dispatch:
@@ -20,8 +20,6 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-          # Sin caché automática: el proyecto está dentro del ZIP
-          # y todavía no se ha descomprimido en este punto.
 
       - name: Configurar Android SDK
         uses: android-actions/setup-android@v4
@@ -37,53 +35,41 @@ jobs:
           unzip -q "$RUNNER_TEMP/gradle.zip" -d "$RUNNER_TEMP"
           echo "$RUNNER_TEMP/gradle-8.9/bin" >> "$GITHUB_PATH"
 
-      - name: Descomprimir proyecto 1.9.1
+      - name: Descomprimir proyecto 1.9.2
         shell: bash
         run: |
-          ZIP="MisCuentas_1.9.1.zip"
-          test -s "$ZIP" || { echo "No se encuentra $ZIP en la raíz del repositorio"; exit 1; }
+          ZIP="MisCuentas_1.9.2.zip"
+          test -s "$ZIP" || { echo "ERROR: No se encuentra $ZIP en la raíz del repositorio"; exit 1; }
           mkdir -p "$RUNNER_TEMP/proyecto"
           unzip -q "$ZIP" -d "$RUNNER_TEMP/proyecto"
           SETTINGS="$(find "$RUNNER_TEMP/proyecto" -type f \( -name settings.gradle -o -name settings.gradle.kts \) -print -quit)"
-          test -n "$SETTINGS" || { echo "No se encontró settings.gradle"; exit 1; }
+          test -n "$SETTINGS" || { echo "ERROR: No se encontró settings.gradle"; exit 1; }
           PROJECT_DIR="$(dirname "$SETTINGS")"
-          test -f "$PROJECT_DIR/app/build.gradle" || test -f "$PROJECT_DIR/app/build.gradle.kts" || { echo "No se encontró el archivo Gradle de app"; exit 1; }
+          test -f "$PROJECT_DIR/app/build.gradle" || { echo "ERROR: No se encontró app/build.gradle"; exit 1; }
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
           echo "Proyecto encontrado en: $PROJECT_DIR"
 
-      - name: Comprobar versión y código fuente
+      - name: Comprobar versión y JavaScript
         shell: bash
         run: |
           python3 - <<'PY'
           import os, pathlib, re, sys
           root = pathlib.Path(os.environ['PROJECT_DIR'])
-          gradle_file = root / 'app/build.gradle'
-          if not gradle_file.exists():
-              gradle_file = root / 'app/build.gradle.kts'
-          gradle = gradle_file.read_text(encoding='utf-8')
-          if not re.search(r"versionName\s+['\"]1\.9\.1['\"]", gradle):
-              sys.exit('versionName no es 1.9.1')
-          if not re.search(r'versionCode\s+27\b', gradle):
-              sys.exit('versionCode no es 27')
-          java_file = root / 'app/src/main/java/com/pau/miscuentas/MainActivity.java'
-          if not java_file.exists():
-              sys.exit('No se encontró MainActivity.java')
-          java = java_file.read_text(encoding='utf-8')
-          if 'SpeechRecognizer.createSpeechRecognizer(this)' not in java:
-              sys.exit('No se encontró el reconocimiento de voz nativo')
-          if 'startActivityForResult(intent, REQ_SPEECH)' in java:
-              sys.exit('Se detectó el antiguo lanzador visual de Google')
-          html_file = root / 'app/src/main/assets/index.html'
-          if html_file.exists():
-              html = html_file.read_text(encoding='utf-8')
-              scripts = re.findall(r'<script[^>]*>(.*?)</script>', html, re.S | re.I)
-              if scripts:
-                  pathlib.Path('/tmp/miscuentas-1.9.1.js').write_text('\n'.join(scripts), encoding='utf-8')
-          print('Versión y código fuente comprobados.')
+          gradle = (root / 'app/build.gradle').read_text(encoding='utf-8')
+          if not re.search(r"versionName\s+['\"]1\.9\.2['\"]", gradle):
+              sys.exit('ERROR: versionName no es 1.9.2')
+          if not re.search(r'versionCode\s+28\b', gradle):
+              sys.exit('ERROR: versionCode no es 28')
+          html = (root / 'app/src/main/assets/index.html').read_text(encoding='utf-8')
+          scripts = re.findall(r'<script[^>]*>(.*?)</script>', html, re.S | re.I)
+          if not scripts:
+              sys.exit('ERROR: No se encontraron bloques JavaScript')
+          pathlib.Path('/tmp/miscuentas-1.9.2.js').write_text('\n'.join(scripts), encoding='utf-8')
+          if 'voiceFiarWrap' not in html or 'voiceFiarCheck' not in html:
+              sys.exit('ERROR: No se encontró el control Fiar')
+          print('Versión y control Fiar comprobados.')
           PY
-          if [ -f /tmp/miscuentas-1.9.1.js ]; then
-            node --check /tmp/miscuentas-1.9.1.js
-          fi
+          node --check /tmp/miscuentas-1.9.2.js
 
       - name: Compilar APK debug
         run: gradle --no-daemon --stacktrace -p "$PROJECT_DIR" clean assembleDebug
@@ -91,7 +77,7 @@ jobs:
       - name: Publicar APK
         uses: actions/upload-artifact@v4
         with:
-          name: MisCuentas-1.9.1-v27
+          name: MisCuentas-1.9.2-v28
           path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           
