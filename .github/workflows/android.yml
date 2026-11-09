@@ -110,4 +110,3 @@ jobs:
           name: MisCuentas-1.4.0-APK
           path: MisCuentas-1.4.0.apk
           if-no-files-found: error
-          
