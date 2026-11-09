@@ -1,4 +1,4 @@
-name: Build MisCuentas 1.9.7
+name: Build MisCuentas 1.9.8
 
 on:
   workflow_dispatch:
@@ -49,7 +49,7 @@ jobs:
           if [ -f app/build.gradle ]; then
             echo "PROJECT_DIR=." >> "$GITHUB_ENV"
           else
-            ZIP_FILE="$(find . -maxdepth 2 -type f -iname 'MisCuentas_1.9.7_proyecto_corregido.zip' -print -quit)"
+            ZIP_FILE="$(find . -maxdepth 2 -type f -iname 'MisCuentas_1.9.7_proyecto.zip' -print -quit)"
             if [ -z "$ZIP_FILE" ]; then
               ZIP_FILE="$(find . -maxdepth 2 -type f -iname '*.zip' -print -quit)"
             fi
@@ -72,18 +72,18 @@ jobs:
         run: |
           set -euo pipefail
           cd "$PROJECT_DIR"
-          grep -Eq "versionCode[[:space:]]+33" app/build.gradle
-          grep -Eq "versionName[[:space:]]+['\"]1\.9\.7['\"]" app/build.gradle
+          grep -Eq "versionCode[[:space:]]+34" app/build.gradle
+          grep -Eq "versionName[[:space:]]+['\"]1\.9\.8['\"]" app/build.gradle
           python3 - <<'PY'
           import re
           p='app/src/main/assets/index.html'
           html=open(p,encoding='utf-8').read()
           scripts=re.findall(r'<script[^>]*>(.*?)</script>',html,re.S|re.I)
-          open('/tmp/miscuentas-1.9.7.js','w',encoding='utf-8').write('\n'.join(scripts))
+          open('/tmp/miscuentas-1.9.8.js','w',encoding='utf-8').write('\n'.join(scripts))
           PY
-          node --check /tmp/miscuentas-1.9.7.js
+          node --check /tmp/miscuentas-1.9.8.js
 
-      - name: Compilar APK 1.9.7
+      - name: Compilar APK 1.9.8
         shell: bash
         run: |
           set -euo pipefail
@@ -94,12 +94,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cp "$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk" "$GITHUB_WORKSPACE/MisCuentas-1.9.7-v33.apk"
+          cp "$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk" "$GITHUB_WORKSPACE/MisCuentas-1.9.8-v34.apk"
 
       - name: Publicar APK con nombre de versión
         uses: actions/upload-artifact@v4
         with:
-          name: MisCuentas-1.9.7-v33
-          path: MisCuentas-1.9.7-v33.apk
+          name: MisCuentas-1.9.8-v34
+          path: MisCuentas-1.9.8-v34.apk
           if-no-files-found: error
           
