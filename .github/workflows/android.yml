@@ -1,11 +1,9 @@
-
-name: Build MisCuentas 1.9.5
+name: Build MisCuentas 1.9.7
 
 on:
   workflow_dispatch:
   push:
-    branches:
-      - main
+    branches: [main, master]
 
 permissions:
   contents: read
@@ -13,189 +11,95 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-
-    env:
-      ANDROID_HOME: /usr/local/lib/android/sdk
-      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
-
     steps:
-      # 1. Descargar repositorio
       - name: Descargar repositorio
         uses: actions/checkout@v4
 
-      # 2. Configurar Java
       - name: Configurar Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      # 3. Configurar Android SDK sin setup-android
       - name: Configurar Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          accept-android-sdk-licenses: true
+          packages: ''
+
+      - name: Instalar componentes Android necesarios
         shell: bash
         run: |
-          set -e
-
-          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
-
-          if [ ! -d "$ANDROID_HOME" ]; then
-            echo "No se encuentra Android SDK en $ANDROID_HOME"
-            exit 1
-          fi
-
-          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" \
-            -type f -name sdkmanager 2>/dev/null | head -n 1)"
-
-          if [ -z "$SDKMANAGER" ]; then
-            echo "No se encuentra sdkmanager"
-            find "$ANDROID_HOME" -maxdepth 4 -type f | head -n 50
-            exit 1
-          fi
-
-          echo "SDK Manager encontrado: $SDKMANAGER"
-          echo "SDKMANAGER=$SDKMANAGER" >> "$GITHUB_ENV"
-
-      # 4. Aceptar licencias e instalar componentes
-      - name: Instalar componentes Android
-        shell: bash
-        run: |
-          set -e
-
-          # Aceptar licencias sin provocar un error Broken pipe
-          set +o pipefail
-          yes | "$SDKMANAGER" --licenses || true
-          set -o pipefail
-
-          "$SDKMANAGER" \
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null
+          sdkmanager --install \
             "platform-tools" \
             "platforms;android-35" \
             "build-tools;35.0.0"
 
-      # 5. Instalar Gradle
       - name: Instalar Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
-      # 6. Extraer y localizar el proyecto
       - name: Extraer y localizar proyecto Android
         shell: bash
         run: |
           set -euo pipefail
-
-          ZIP="MisCuentas_1.9.5.zip"
-
-          if [ ! -f "$ZIP" ]; then
-            echo "ERROR: No se encuentra $ZIP"
-            echo "Archivos disponibles:"
-            ls -lah
-            exit 1
-          fi
-
-          mkdir -p proyecto_extraido
-          unzip -q "$ZIP" -d proyecto_extraido
-
-          SETTINGS="$(find proyecto_extraido -type f \
-            \( -name settings.gradle -o -name settings.gradle.kts \) \
-            -print -quit)"
-
-          if [ -z "$SETTINGS" ]; then
-            echo "ERROR: No se encuentra settings.gradle"
-            find proyecto_extraido -maxdepth 5 -type f | head -n 100
-            exit 1
-          fi
-
-          PROJECT_DIR="$(dirname "$SETTINGS")"
-
-          if [ ! -f "$PROJECT_DIR/app/build.gradle" ] && \
-             [ ! -f "$PROJECT_DIR/app/build.gradle.kts" ]; then
-            echo "ERROR: No se encuentra app/build.gradle"
-            exit 1
-          fi
-
-          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-
-          echo "Proyecto localizado:"
-          echo "$PROJECT_DIR"
-
-          echo "Contenido del proyecto:"
-          ls -lah "$PROJECT_DIR"
-
-      # 7. Comprobar versión configurada
-      - name: Comprobar versión del proyecto
-        shell: bash
-        run: |
-          set -e
-
-          GRADLE_FILE="$PROJECT_DIR/app/build.gradle"
-
-          if [ ! -f "$GRADLE_FILE" ]; then
-            GRADLE_FILE="$PROJECT_DIR/app/build.gradle.kts"
-          fi
-
-          echo "Configuración Gradle:"
-          grep -nE 'versionCode|versionName' "$GRADLE_FILE" || true
-
-          echo "La compilación se identificará como 1.9.5-v31."
-
-      # 8. Validar JavaScript
-      - name: Validar JavaScript
-        shell: bash
-        run: |
-          set -e
-
-          while IFS= read -r -d '' FILE; do
-            echo "Comprobando: $FILE"
-            node --check "$FILE"
-          done < <(
-            find "$PROJECT_DIR" \
-              -type d \( -name node_modules -o -name .gradle \) -prune \
-              -o -type f -name "*.js" -print0
-          )
-
-      # 9. Compilar APK
-      - name: Compilar APK 1.9.5
-        shell: bash
-        run: |
-          set -e
-
-          cd "$PROJECT_DIR"
-
-          if [ -f "./gradlew" ]; then
-            chmod +x ./gradlew
-            ./gradlew clean assembleDebug
+          if [ -f app/build.gradle ]; then
+            echo "PROJECT_DIR=." >> "$GITHUB_ENV"
           else
-            gradle clean assembleDebug
+            ZIP_FILE="$(find . -maxdepth 2 -type f -iname 'MisCuentas_1.9.7_proyecto.zip' -print -quit)"
+            if [ -z "$ZIP_FILE" ]; then
+              ZIP_FILE="$(find . -maxdepth 2 -type f -iname '*.zip' -print -quit)"
+            fi
+            if [ -z "$ZIP_FILE" ]; then
+              echo "::error::No encuentro el proyecto Android ni un ZIP del proyecto."
+              exit 1
+            fi
+            mkdir -p "$RUNNER_TEMP/miscuentas-src"
+            unzip -q "$ZIP_FILE" -d "$RUNNER_TEMP/miscuentas-src"
+            PROJECT="$(find "$RUNNER_TEMP/miscuentas-src" -type f -path '*/app/build.gradle' -print -quit | sed 's#/app/build.gradle$##')"
+            if [ -z "$PROJECT" ]; then
+              echo "::error::El ZIP no contiene app/build.gradle."
+              exit 1
+            fi
+            echo "PROJECT_DIR=$PROJECT" >> "$GITHUB_ENV"
           fi
 
-      # 10. Preparar APK
+      - name: Validar versión y JavaScript
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$PROJECT_DIR"
+          grep -Eq "versionCode[[:space:]]+33" app/build.gradle
+          grep -Eq "versionName[[:space:]]+['\"]1\.9\.7['\"]" app/build.gradle
+          python3 - <<'PY'
+          import re
+          p='app/src/main/assets/index.html'
+          html=open(p,encoding='utf-8').read()
+          scripts=re.findall(r'<script[^>]*>(.*?)</script>',html,re.S|re.I)
+          open('/tmp/miscuentas-1.9.7.js','w',encoding='utf-8').write('\n'.join(scripts))
+          PY
+          node --check /tmp/miscuentas-1.9.7.js
+
+      - name: Compilar APK 1.9.7
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$PROJECT_DIR"
+          gradle --no-daemon --stacktrace clean assembleDebug
+
       - name: Preparar APK con nombre de versión
         shell: bash
         run: |
-          set -e
+          set -euo pipefail
+          cp "$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk" "$GITHUB_WORKSPACE/MisCuentas-1.9.7-v33.apk"
 
-          APK="$(find "$PROJECT_DIR/app/build/outputs/apk/debug" \
-            -type f -name "*.apk" -print -quit)"
-
-          if [ -z "$APK" ]; then
-            echo "ERROR: No se ha generado el APK"
-            exit 1
-          fi
-
-          mkdir -p salida
-
-          cp "$APK" "salida/MisCuentas-1.9.5-v31.apk"
-
-          echo "APK generado:"
-          ls -lh salida/
-
-      # 11. Publicar APK
-      - name: Publicar APK 1.9.5
+      - name: Publicar APK con nombre de versión
         uses: actions/upload-artifact@v4
         with:
-          name: MisCuentas-1.9.5-v31
-          path: salida/MisCuentas-1.9.5-v31.apk
+          name: MisCuentas-1.9.7-v33
+          path: MisCuentas-1.9.7-v33.apk
           if-no-files-found: error
-          retention-days: 30
           
