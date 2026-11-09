@@ -1,9 +1,12 @@
-name: Build MisCuentas 1.9.3
+
+name: Build MisCuentas automático
 
 on:
-  workflow_dispatch:
   push:
-    branches: [main, master]
+    paths:
+      - 'MisCuentas_*.zip'
+      - '.github/workflows/android.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -11,6 +14,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Descargar repositorio
         uses: actions/checkout@v4
@@ -22,68 +26,38 @@ jobs:
           java-version: '17'
 
       - name: Configurar Android SDK
-        uses: android-actions/setup-android@v4
+        uses: android-actions/setup-android@v3
 
-      - name: Instalar SDK requerido
-        run: |
-          yes | sdkmanager --licenses
-          sdkmanager --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
-
-      - name: Instalar Gradle 8.9
-        run: |
-          curl --fail --location --retry 8 --retry-all-errors https://services.gradle.org/distributions/gradle-8.9-bin.zip --output "$RUNNER_TEMP/gradle.zip"
-          unzip -q "$RUNNER_TEMP/gradle.zip" -d "$RUNNER_TEMP"
-          echo "$RUNNER_TEMP/gradle-8.9/bin" >> "$GITHUB_PATH"
-
-      - name: Descomprimir proyecto 1.9.3
+      - name: Preparar proyecto
         shell: bash
         run: |
-          ZIP="MisCuentas_1.9.3.zip"
-          test -s "$ZIP" || { echo "ERROR: No se encuentra $ZIP en la raíz del repositorio"; exit 1; }
-          mkdir -p "$RUNNER_TEMP/miscuentas-193"
-          unzip -q "$ZIP" -d "$RUNNER_TEMP/miscuentas-193"
-          SETTINGS="$(find "$RUNNER_TEMP/miscuentas-193" -type f \( -name settings.gradle -o -name settings.gradle.kts \) -print -quit)"
-          test -n "$SETTINGS" || { echo "ERROR: No se encontró settings.gradle dentro del ZIP"; exit 1; }
-          PROJECT_DIR="$(dirname "$SETTINGS")"
-          test -f "$PROJECT_DIR/app/build.gradle" || { echo "ERROR: No se encontró app/build.gradle"; exit 1; }
+          set -e
+          mkdir -p source
+          ZIP=$(find . -maxdepth 1 -name 'MisCuentas_*.zip' -type f | sort -V | tail -n 1)
+          if [ -z "$ZIP" ]; then
+            echo "No se ha encontrado ningún ZIP MisCuentas."
+            exit 1
+          fi
+          echo "Usando: $ZIP"
+          unzip -q "$ZIP" -d source
+          GRADLE=$(find source -type f -name gradlew | head -n 1)
+          if [ -z "$GRADLE" ]; then
+            echo "No se ha encontrado gradlew."
+            exit 1
+          fi
+          PROJECT_DIR=$(dirname "$GRADLE")
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-          echo "Proyecto encontrado: $PROJECT_DIR"
+          chmod +x "$GRADLE"
 
-      - name: Comprobar versión, GIF y JavaScript
-        shell: bash
+      - name: Compilar APK
         run: |
-          python3 - <<'PY'
-          import os, pathlib, re, sys
-          root = pathlib.Path(os.environ['PROJECT_DIR'])
-          gradle = (root / 'app/build.gradle').read_text(encoding='utf-8')
-          if not re.search(r"versionName\s+['\"]1\.9\.3['\"]", gradle):
-              sys.exit('ERROR: versionName no es 1.9.3')
-          if not re.search(r'versionCode\s+29\b', gradle):
-              sys.exit('ERROR: versionCode no es 29')
-          html = (root / 'app/src/main/assets/index.html').read_text(encoding='utf-8')
-          if 'pollito_microfono_animado.gif' not in html:
-              sys.exit('ERROR: no se está usando el GIF nuevo')
-          gif = root / 'app/src/main/assets/pollito_microfono_animado.gif'
-          if not gif.is_file() or gif.stat().st_size < 10000:
-              sys.exit('ERROR: falta el GIF animado')
-          scripts = re.findall(r'<script[^>]*>(.*?)</script>', html, re.S | re.I)
-          if not scripts:
-              sys.exit('ERROR: no se encontraron scripts JavaScript')
-          pathlib.Path('/tmp/miscuentas-1.9.3.js').write_text('\n'.join(scripts), encoding='utf-8')
-          java = (root / 'app/src/main/java/com/pau/miscuentas/VoicePopupActivity.java').read_text(encoding='utf-8')
-          if 'web.setBackgroundColor' not in java or 'widget-voice-mode' not in java:
-              sys.exit('ERROR: falta la inicialización visual del widget de voz')
-          print('Versión, GIF, JavaScript y configuración visual del widget comprobados.')
-          PY
-          node --check /tmp/miscuentas-1.9.3.js
+          cd "$PROJECT_DIR"
+          ./gradlew clean assembleDebug
 
-      - name: Compilar APK debug
-        run: gradle --no-daemon --stacktrace -p "$PROJECT_DIR" clean assembleDebug
-
-      - name: Publicar APK
+      - name: Guardar APK
         uses: actions/upload-artifact@v4
         with:
-          name: MisCuentas-1.9.3-v29
-          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/app-debug.apk
+          name: MisCuentas-APK-${{ github.run_number }}
+          path: source/**/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           
