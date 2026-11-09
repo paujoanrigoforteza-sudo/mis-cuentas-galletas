@@ -60,6 +60,9 @@ jobs:
           fi
           echo "PROJECT_DIR=$PROJECT" >> "$GITHUB_ENV"
 
+      - name: Instalar Pillow para validar animaciones
+        run: python3 -m pip install --user Pillow
+
       - name: Validar versión, JavaScript, GIFs transparentes y sonidos
         shell: bash
         run: |
@@ -104,4 +107,3 @@ jobs:
           name: MisCuentas-1.9.15-v41
           path: MisCuentas-1.9.15-v41.apk
           if-no-files-found: error
-          
