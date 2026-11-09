@@ -91,7 +91,7 @@ jobs:
           if not scripts:
               raise SystemExit('No se encontraron scripts JavaScript en index.html')
           with open('/tmp/miscuentas-1.9.11.js', 'w', encoding='utf-8') as f:
-              f.write('\\n'.join(scripts))
+              f.write('\n'.join(scripts))
           PY
 
           node --check /tmp/miscuentas-1.9.11.js
