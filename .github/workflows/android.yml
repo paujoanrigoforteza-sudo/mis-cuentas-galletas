@@ -1,4 +1,4 @@
-name: Build MisCuentas 1.7.0 APK
+name: Build MisCuentas 1.8.0 pruebas
 
 on:
   workflow_dispatch:
@@ -51,9 +51,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ZIP="MisCuentas_1.7.0_proyecto_descarga.zip"
+          ZIP="MisCuentas_1.8.0_pruebas.zip"
           test -s "$ZIP" || { echo "::error::No encuentro $ZIP en la raíz del repositorio"; exit 1; }
-          EXTRACT="$RUNNER_TEMP/miscuentas_1_7_0"
+          EXTRACT="$RUNNER_TEMP/miscuentas_1_8_0"
           mkdir -p "$EXTRACT"
           unzip -q "$ZIP" -d "$EXTRACT"
           CANDIDATE="$(find "$EXTRACT" -type f -path '*/app/build.gradle' -print -quit)"
@@ -62,9 +62,10 @@ jobs:
           test -f "$PROJECT_DIR/settings.gradle"
           test -f "$PROJECT_DIR/app/src/main/assets/index.html"
           test -f "$PROJECT_DIR/app/src/main/java/com/pau/miscuentas/MainActivity.java"
-          grep -Fq "versionName '1.7.0'" "$PROJECT_DIR/app/build.gradle"
-          grep -Fq "versionCode 22" "$PROJECT_DIR/app/build.gradle"
-          grep -Fq 'android:label="MisCuentas 1.7.0"' "$PROJECT_DIR/app/src/main/AndroidManifest.xml"
+          test -s "$PROJECT_DIR/app/src/main/assets/voice_chick_reference.png"
+          grep -Fq "versionName '1.8.0'" "$PROJECT_DIR/app/build.gradle"
+          grep -Fq "versionCode 23" "$PROJECT_DIR/app/build.gradle"
+          grep -Fq 'android:label="MisCuentas 1.8.0 (pruebas)"' "$PROJECT_DIR/app/src/main/AndroidManifest.xml"
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
           echo "Proyecto localizado: $PROJECT_DIR"
 
@@ -80,7 +81,7 @@ jobs:
           if not scripts:
               raise SystemExit("No se encontró JavaScript en index.html")
           with open(sys.argv[2], "w", encoding="utf-8") as f:
-              f.write("\n".join(scripts))
+              f.write("\\n".join(scripts))
           PY
           node --check "$RUNNER_TEMP/miscuentas.js"
 
@@ -93,15 +94,15 @@ jobs:
         run: |
           set -euo pipefail
           SOURCE="$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk"
-          DEST="MisCuentas-1.7.0.apk"
+          DEST="MisCuentas-1.8.0-pruebas.apk"
           test -s "$SOURCE" || { echo "::error::No se ha generado el APK"; exit 1; }
           cp "$SOURCE" "$DEST"
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$DEST" | grep -F "versionName='1.7.0'"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$DEST" | grep -F "versionName='1.8.0'"
           ls -lh "$DEST"
 
       - name: Upload versioned APK
         uses: actions/upload-artifact@v4
         with:
-          name: MisCuentas-1.7.0-APK
-          path: MisCuentas-1.7.0.apk
+          name: MisCuentas-1.8.0-pruebas-APK
+          path: MisCuentas-1.8.0-pruebas.apk
           if-no-files-found: error
