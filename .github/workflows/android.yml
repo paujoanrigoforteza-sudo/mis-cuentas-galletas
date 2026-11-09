@@ -1,4 +1,4 @@
-name: Build MisCuentas 1.9.13
+name: Build MisCuentas 1.9.14
 
 on:
   workflow_dispatch:
@@ -30,10 +30,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sdkmanager --install \
-            "platform-tools" \
-            "platforms;android-35" \
-            "build-tools;35.0.0"
+          sdkmanager --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
       - name: Instalar Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
@@ -47,9 +44,9 @@ jobs:
           if [ -f "$GITHUB_WORKSPACE/app/build.gradle" ]; then
             PROJECT="$GITHUB_WORKSPACE"
           else
-            ZIP_FILE="$GITHUB_WORKSPACE/MisCuentas_1.9.13.zip"
+            ZIP_FILE="$GITHUB_WORKSPACE/MisCuentas_1.9.14.zip"
             if [ ! -f "$ZIP_FILE" ]; then
-              echo "::error::No encuentro MisCuentas_1.9.13.zip en la raíz del repositorio."
+              echo "::error::No encuentro MisCuentas_1.9.14.zip en la raíz del repositorio."
               exit 1
             fi
             mkdir -p "$RUNNER_TEMP/miscuentas-src"
@@ -64,37 +61,30 @@ jobs:
           echo "PROJECT_DIR=$PROJECT" >> "$GITHUB_ENV"
           echo "Proyecto localizado en: $PROJECT"
 
-      - name: Validar versión, JavaScript y sonido
+      - name: Validar versión, JavaScript y animación
         shell: bash
         run: |
           set -euo pipefail
           cd "$PROJECT_DIR"
-          grep -Eq 'versionCode[[:space:]]+39([[:space:]]|$)' app/build.gradle || {
-            echo "::error::versionCode no es 39 en app/build.gradle"
-            exit 1
-          }
-          grep -Eq 'versionName[[:space:]]+["\x27]1\.9\.13["\x27]' app/build.gradle || {
-            echo "::error::versionName no es 1.9.13 en app/build.gradle"
-            exit 1
-          }
+          grep -Eq 'versionCode[[:space:]]+40([[:space:]]|$)' app/build.gradle || { echo "::error::versionCode no es 40"; exit 1; }
+          grep -Eq 'versionName[[:space:]]+"1\.9\.14"' app/build.gradle || { echo "::error::versionName no es 1.9.14"; exit 1; }
           python3 - <<'PY'
           import re
-          path = 'app/src/main/assets/index.html'
-          with open(path, encoding='utf-8') as f:
-              html = f.read()
-          scripts = re.findall(r'<script[^>]*>(.*?)</script>', html, re.S | re.I)
-          if not scripts:
-              raise SystemExit('No se encontraron scripts JavaScript en index.html')
-          with open('/tmp/miscuentas-1.9.13.js', 'w', encoding='utf-8') as f:
-              f.write('\n'.join(scripts))
+          p='app/src/main/assets/index.html'
+          html=open(p,encoding='utf-8').read()
+          scripts=re.findall(r'<script[^>]*>(.*?)</script>',html,re.S|re.I)
+          if not scripts: raise SystemExit('No se encontraron scripts JavaScript')
+          open('/tmp/miscuentas-1.9.14.js','w',encoding='utf-8').write('\n'.join(scripts))
+          from PIL import Image
+          im=Image.open('app/src/main/assets/chick_header_walk.gif')
+          if im.n_frames < 12: raise SystemExit('La animación superior necesita al menos 12 fotogramas')
+          im.seek(0)
+          if im.convert('RGBA').getchannel('A').getextrema()[0] != 0: raise SystemExit('El GIF superior no tiene transparencia real')
           PY
-          node --check /tmp/miscuentas-1.9.13.js
-          test -f app/src/main/assets/sounds/reclamar_carga.mp3 || {
-            echo "::error::Falta el sonido local reclamar_carga.mp3"
-            exit 1
-          }
+          node --check /tmp/miscuentas-1.9.14.js
+          test -f app/src/main/assets/sounds/reclamar_carga.mp3 || { echo "::error::Falta el sonido local reclamar_carga.mp3"; exit 1; }
 
-      - name: Compilar APK 1.9.13
+      - name: Compilar APK 1.9.14
         shell: bash
         run: |
           set -euo pipefail
@@ -105,11 +95,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cp "$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk" "$GITHUB_WORKSPACE/MisCuentas-1.9.13-v39.apk"
+          cp "$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk" "$GITHUB_WORKSPACE/MisCuentas-1.9.14-v40.apk"
 
       - name: Publicar APK con nombre de versión
         uses: actions/upload-artifact@v4
         with:
-          name: MisCuentas-1.9.13-v39
-          path: MisCuentas-1.9.13-v39.apk
+          name: MisCuentas-1.9.14-v40
+          path: MisCuentas-1.9.14-v40.apk
           if-no-files-found: error
+          
