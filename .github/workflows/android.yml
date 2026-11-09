@@ -1,4 +1,4 @@
-name: Build MisCuentas 1.3.2 APK
+name: Build MisCuentas 1.3.3 APK
 
 on:
   workflow_dispatch:
@@ -23,47 +23,41 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
-        with:
-          packages: 'platform-tools'
 
       - name: Accept Android SDK licences
         run: yes | sdkmanager --licenses
 
       - name: Install Android SDK packages
-        run: sdkmanager --install "platforms;android-35" "build-tools;35.0.0"
+        run: sdkmanager --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Verify and extract exact 1.3.2 project
+      - name: Verify project version
         run: |
           set -euo pipefail
-          test -f MisCuentas-1.3.2-proyecto-versionado.zip
-          unzip -t MisCuentas-1.3.2-proyecto-versionado.zip
-          unzip -q MisCuentas-1.3.2-proyecto-versionado.zip -d .
-          test -f miscuentas_work/app/build.gradle
-          grep -q "versionName '1.3.2'" miscuentas_work/app/build.gradle
-          grep -q 'android:label="MisCuentas 1.3.2"' miscuentas_work/app/src/main/AndroidManifest.xml
-          test -f miscuentas_work/app/src/main/assets/index.html
-          echo "Código fuente 1.3.2 verificado."
+          test -f app/src/main/assets/index.html
+          grep -q "versionName '1.3.3'" app/build.gradle
+          grep -q 'versionCode 18' app/build.gradle
+          grep -q 'android:label="MisCuentas 1.3.3"' app/src/main/AndroidManifest.xml
+          echo "Proyecto MisCuentas 1.3.3 verificado."
 
       - name: Build clean APK
-        working-directory: miscuentas_work
         run: gradle --no-daemon clean assembleDebug
 
-      - name: Rename APK with version
+      - name: Rename and verify APK
         run: |
           set -euo pipefail
-          SOURCE="miscuentas_work/app/build/outputs/apk/debug/app-debug.apk"
-          DEST="MisCuentas-1.3.2.apk"
+          SOURCE="app/build/outputs/apk/debug/app-debug.apk"
+          DEST="MisCuentas-1.3.3.apk"
           test -s "$SOURCE"
           cp "$SOURCE" "$DEST"
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$DEST" | grep "versionName='1.3.2'"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$DEST" | grep "versionName='1.3.3'"
           ls -lh "$DEST"
 
       - name: Upload versioned APK
         uses: actions/upload-artifact@v4
         with:
-          name: MisCuentas-1.3.2-APK
-          path: MisCuentas-1.3.2.apk
+          name: MisCuentas-1.3.3-APK
+          path: MisCuentas-1.3.3.apk
           if-no-files-found: error
