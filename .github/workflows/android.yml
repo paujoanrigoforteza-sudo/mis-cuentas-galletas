@@ -51,7 +51,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ZIP="MisCuentas-1.7.0-proyecto.zip"
+          ZIP="MisCuentas_1.7.0_proyecto_descarga.zip"
           test -s "$ZIP" || { echo "::error::No encuentro $ZIP en la raíz del repositorio"; exit 1; }
           EXTRACT="$RUNNER_TEMP/miscuentas_1_7_0"
           mkdir -p "$EXTRACT"
