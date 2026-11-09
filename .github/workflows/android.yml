@@ -33,26 +33,41 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Verify project version
+      - name: Locate and verify project
+        shell: bash
         run: |
           set -euo pipefail
-          test -f app/src/main/assets/index.html
-          grep -q "versionName '1.3.3'" app/build.gradle
-          grep -q 'versionCode 18' app/build.gradle
-          grep -q 'android:label="MisCuentas 1.3.3"' app/src/main/AndroidManifest.xml
-          echo "Proyecto MisCuentas 1.3.3 verificado."
+          if [[ -f "app/build.gradle" ]]; then
+            PROJECT_DIR="."
+          elif [[ -f "miscuentas_work/app/build.gradle" ]]; then
+            PROJECT_DIR="miscuentas_work"
+          else
+            echo "::error::No encuentro app/build.gradle. Sube el CONTENIDO del ZIP a la raíz del repositorio, o deja la carpeta miscuentas_work."
+            echo "Archivos y carpetas en la raíz:"
+            ls -la
+            exit 1
+          fi
+
+          echo "Proyecto localizado en: $PROJECT_DIR"
+          test -f "$PROJECT_DIR/app/src/main/assets/index.html" || { echo "::error::Falta index.html"; exit 1; }
+          grep -Fq "versionName '1.3.3'" "$PROJECT_DIR/app/build.gradle" || { echo "::error::versionName no es 1.3.3"; grep -n 'versionName\|versionCode' "$PROJECT_DIR/app/build.gradle"; exit 1; }
+          grep -Fq "versionCode 18" "$PROJECT_DIR/app/build.gradle" || { echo "::error::versionCode no es 18"; grep -n 'versionName\|versionCode' "$PROJECT_DIR/app/build.gradle"; exit 1; }
+          grep -Fq 'android:label="MisCuentas 1.3.3"' "$PROJECT_DIR/app/src/main/AndroidManifest.xml" || { echo "::error::Etiqueta Android no coincide"; grep -n 'android:label' "$PROJECT_DIR/app/src/main/AndroidManifest.xml"; exit 1; }
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "Proyecto MisCuentas 1.3.3 verificado correctamente."
 
       - name: Build clean APK
-        run: gradle --no-daemon clean assembleDebug
+        run: gradle --no-daemon -p "$PROJECT_DIR" clean assembleDebug
 
       - name: Rename and verify APK
+        shell: bash
         run: |
           set -euo pipefail
-          SOURCE="app/build/outputs/apk/debug/app-debug.apk"
+          SOURCE="$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk"
           DEST="MisCuentas-1.3.3.apk"
-          test -s "$SOURCE"
+          test -s "$SOURCE" || { echo "::error::No se ha generado el APK en $SOURCE"; exit 1; }
           cp "$SOURCE" "$DEST"
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$DEST" | grep "versionName='1.3.3'"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$DEST" | grep -F "versionName='1.3.3'"
           ls -lh "$DEST"
 
       - name: Upload versioned APK
