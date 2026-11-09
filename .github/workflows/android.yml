@@ -1,4 +1,3 @@
-
 name: Build MisCuentas 1.9.11
 
 on:
@@ -26,7 +25,6 @@ jobs:
         uses: android-actions/setup-android@v4
         with:
           accept-android-sdk-licenses: true
-          packages: ''
 
       - name: Instalar componentes Android necesarios
         shell: bash
@@ -46,38 +44,62 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ -f app/build.gradle ]; then
-            echo "PROJECT_DIR=." >> "$GITHUB_ENV"
+
+          if [ -f "app/build.gradle" ]; then
+            PROJECT="$GITHUB_WORKSPACE"
           else
-            ZIP_FILE="$(find . -maxdepth 2 -type f -iname 'MisCuentas_1.9.11_con_sonido.zip' -print -quit)"
+            ZIP_FILE="$(find "$GITHUB_WORKSPACE" -type f -name 'MisCuentas_1.9.11_con_sonido.zip' -print -quit)"
             if [ -z "$ZIP_FILE" ]; then
-              echo "::error::No encuentro el ZIP del proyecto 1.9.11 con sonido."
+              echo "::error::No encuentro MisCuentas_1.9.11_con_sonido.zip en el repositorio."
               exit 1
             fi
+
             mkdir -p "$RUNNER_TEMP/miscuentas-src"
             unzip -q "$ZIP_FILE" -d "$RUNNER_TEMP/miscuentas-src"
             PROJECT="$(find "$RUNNER_TEMP/miscuentas-src" -type f -path '*/app/build.gradle' -print -quit | sed 's#/app/build.gradle$##')"
+
             if [ -z "$PROJECT" ]; then
-              echo "::error::El ZIP no contiene app/build.gradle."
+              echo "::error::El ZIP no contiene un proyecto Android válido (app/build.gradle)."
               exit 1
             fi
-            echo "PROJECT_DIR=$PROJECT" >> "$GITHUB_ENV"
+          fi
+
+          echo "PROJECT_DIR=$PROJECT" >> "$GITHUB_ENV"
+          echo "Proyecto localizado en: $PROJECT"
 
       - name: Validar versión y JavaScript
         shell: bash
         run: |
           set -euo pipefail
           cd "$PROJECT_DIR"
-          grep -Eq "versionCode[[:space:]]+37" app/build.gradle
-          grep -Eq "versionName[[:space:]]+['\"]1\.9\.11['\"]" app/build.gradle
+
+          grep -Eq 'versionCode[[:space:]]+37([[:space:]]|$)' app/build.gradle || {
+            echo "::error::versionCode no es 37 en app/build.gradle"
+            exit 1
+          }
+          grep -Eq 'versionName[[:space:]]+"1\\.9\\.11"' app/build.gradle || {
+            echo "::error::versionName no es 1.9.11 en app/build.gradle"
+            exit 1
+          }
+
           python3 - <<'PY'
           import re
-          p='app/src/main/assets/index.html'
-          html=open(p,encoding='utf-8').read()
-          scripts=re.findall(r'<script[^>]*>(.*?)</script>',html,re.S|re.I)
-          open('/tmp/miscuentas-1.9.11.js','w',encoding='utf-8').write('\n'.join(scripts))
+          path = 'app/src/main/assets/index.html'
+          with open(path, encoding='utf-8') as f:
+              html = f.read()
+          scripts = re.findall(r'<script[^>]*>(.*?)</script>', html, re.S | re.I)
+          if not scripts:
+              raise SystemExit('No se encontraron scripts JavaScript en index.html')
+          with open('/tmp/miscuentas-1.9.11.js', 'w', encoding='utf-8') as f:
+              f.write('\\n'.join(scripts))
           PY
+
           node --check /tmp/miscuentas-1.9.11.js
+
+          test -f app/src/main/assets/sounds/reclamar_carga.mp3 || {
+            echo "::error::Falta el sonido local reclamar_carga.mp3"
+            exit 1
+          }
 
       - name: Compilar APK 1.9.11
         shell: bash
