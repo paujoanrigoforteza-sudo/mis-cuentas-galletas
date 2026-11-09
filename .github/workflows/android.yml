@@ -39,8 +39,20 @@ jobs:
 
       - name: Descomprimir proyecto
         run: |
-          ZIP="MisCuentas_1.8.0_pruebas.zip"
-          test -s "$ZIP"
+          ZIP=""
+          for CANDIDATE in "MisCuentas_1.8.0.zip" "MisCuentas_1.8.0_pruebas.zip"; do
+            if [ -s "$CANDIDATE" ]; then
+              ZIP="$CANDIDATE"
+              break
+            fi
+          done
+          if [ -z "$ZIP" ]; then
+            echo "ERROR: No encuentro MisCuentas_1.8.0.zip ni MisCuentas_1.8.0_pruebas.zip en la raíz del repositorio."
+            echo "Archivos ZIP encontrados:"
+            find . -maxdepth 2 -type f -name '*.zip' -print
+            exit 1
+          fi
+          echo "Usando archivo: $ZIP"
           mkdir -p "$RUNNER_TEMP/proyecto"
           unzip -q "$ZIP" -d "$RUNNER_TEMP/proyecto"
           SETTINGS=$(find "$RUNNER_TEMP/proyecto" -name settings.gradle -print -quit)
