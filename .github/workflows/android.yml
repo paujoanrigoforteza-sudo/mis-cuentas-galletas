@@ -1,4 +1,4 @@
-name: Build MisCuentas APK
+name: Build MisCuentas 1.3.1 APK
 
 on:
   workflow_dispatch:
@@ -11,9 +11,8 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up JDK 17
@@ -35,15 +34,38 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Descomprimir proyecto 1.2.1
-        run: unzip -q MisCuentas-1.2.1-proyecto.zip -d .
+      - name: Verify and extract exact 1.3.1 source
+        run: |
+          set -euo pipefail
+          test -f MisCuentas-1.3.1-proyecto.zip
+          unzip -t MisCuentas-1.3.1-proyecto.zip
+          unzip -q MisCuentas-1.3.1-proyecto.zip -d .
+          test -f miscuentas_work/app/build.gradle
+          grep -q "versionName '1.3.1'" miscuentas_work/app/build.gradle
+          grep -q 'function consumeStock(halves)' miscuentas_work/app/src/main/assets/index.html
+          grep -q 'function restoreStockAllocation(alloc)' miscuentas_work/app/src/main/assets/index.html
+          grep -q 'function saleStockHalvesFromAmount(amount)' miscuentas_work/app/src/main/assets/index.html
+          grep -q 'Venta registrada y stock descontado correctamente' miscuentas_work/app/src/main/assets/index.html
+          grep -q 'function updateMove(id)' miscuentas_work/app/src/main/assets/index.html
+          grep -q 'function confirmVoice()' miscuentas_work/app/src/main/assets/index.html
+          grep -q 'voiceStockHalves' miscuentas_work/app/src/main/assets/index.html
+          echo 'SOURCE VERIFIED: stock allocation, voice sales, editing and deletion stock reconciliation'
 
-      - name: Build debug APK
+      - name: Build clean debug APK
         working-directory: miscuentas_work
-        run: gradle --no-daemon assembleDebug
+        run: gradle --no-daemon clean assembleDebug
 
-      - name: Upload APK
+      - name: Verify APK output
+        run: |
+          set -euo pipefail
+          APK='miscuentas_work/app/build/outputs/apk/debug/app-debug.apk'
+          test -s "$APK"
+          ls -lh "$APK"
+
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MisCuentas-1.2.1-debug
+          name: MisCuentas-1.3.1-APK
           path: miscuentas_work/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          
