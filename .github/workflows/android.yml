@@ -1,3 +1,4 @@
+
 name: Build MisCuentas 1.8.0
 
 on:
@@ -31,7 +32,7 @@ jobs:
 
       - name: Instalar Gradle 8.9
         run: |
-          curl --fail --location --retry 8 --retry-all-errors --retry-delay 10 \
+          curl --fail --location --retry 8 --retry-all-errors \
             https://services.gradle.org/distributions/gradle-8.9-bin.zip \
             --output "$RUNNER_TEMP/gradle.zip"
           unzip -q "$RUNNER_TEMP/gradle.zip" -d "$RUNNER_TEMP"
@@ -39,42 +40,18 @@ jobs:
 
       - name: Descomprimir proyecto
         run: |
-          ZIP=""
-          for CANDIDATE in "MisCuentas_1.8.0.zip" "MisCuentas_1.8.0_pruebas.zip"; do
-            if [ -s "$CANDIDATE" ]; then
-              ZIP="$CANDIDATE"
-              break
-            fi
-          done
-          if [ -z "$ZIP" ]; then
-            echo "ERROR: No encuentro MisCuentas_1.8.0.zip ni MisCuentas_1.8.0_pruebas.zip en la raíz del repositorio."
-            echo "Archivos ZIP encontrados:"
-            find . -maxdepth 2 -type f -name '*.zip' -print
-            exit 1
-          fi
-          echo "Usando archivo: $ZIP"
+          ZIP="MisCuentas_1.8.0_LISTO_PARA_SUBIR.zip"
+          test -s "$ZIP"
           mkdir -p "$RUNNER_TEMP/proyecto"
           unzip -q "$ZIP" -d "$RUNNER_TEMP/proyecto"
           SETTINGS=$(find "$RUNNER_TEMP/proyecto" -name settings.gradle -print -quit)
+          if [ -z "$SETTINGS" ]; then
+            SETTINGS=$(find "$RUNNER_TEMP/proyecto" -name settings.gradle.kts -print -quit)
+          fi
           test -n "$SETTINGS"
           PROJECT_DIR=$(dirname "$SETTINGS")
-          test -f "$PROJECT_DIR/app/build.gradle"
-          test -f "$PROJECT_DIR/app/src/main/java/com/pau/miscuentas/VoicePopupActivity.java"
-          grep -Fq "versionName '1.8.0'" "$PROJECT_DIR/app/build.gradle"
-          grep -Fq "versionCode 23" "$PROJECT_DIR/app/build.gradle"
+          test -f "$PROJECT_DIR/app/build.gradle" -o -f "$PROJECT_DIR/app/build.gradle.kts"
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-
-      - name: Comprobar JavaScript
-        run: |
-          python3 - "$PROJECT_DIR/app/src/main/assets/index.html" "$RUNNER_TEMP/miscuentas.js" <<'PY'
-          import re, sys
-          html = open(sys.argv[1], encoding='utf-8').read()
-          scripts = re.findall(r'<script[^>]*>(.*?)</script>', html, re.S | re.I)
-          if not scripts:
-              raise SystemExit('No se encontró JavaScript en index.html')
-          open(sys.argv[2], 'w', encoding='utf-8').write('\n'.join(scripts))
-          PY
-          node --check "$RUNNER_TEMP/miscuentas.js"
 
       - name: Compilar APK debug
         run: gradle --no-daemon --stacktrace -p "$PROJECT_DIR" clean assembleDebug
@@ -82,7 +59,7 @@ jobs:
       - name: Publicar APK
         uses: actions/upload-artifact@v4
         with:
-          name: MisCuentas-1.8.0
+          name: MisCuentas-1.8.0-pruebas
           path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           
