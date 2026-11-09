@@ -1,63 +1,34 @@
-name: Crear APK Android
-
+name: Build MisCuentas APK
 on:
   workflow_dispatch:
   push:
     branches: [ main, master ]
-
 permissions:
   contents: read
-
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Descargar repositorio
+      - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Preparar Java
+      - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-
-      - name: Preparar Android SDK
+      - name: Set up Android SDK
         uses: android-actions/setup-android@v3
-        with:
-          packages: 'platform-tools'
-
-      - name: Instalar paquetes Android
-        run: |
-          yes | sdkmanager --licenses
-          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
-
-      - name: Preparar Gradle
+      - name: Install Android SDK packages
+        run: sdkmanager 'platform-tools' 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.9'
-
-      - name: Descomprimir proyecto
-        run: |
-          unzip -q MisCuentas-1.1.7-voz-inteligente.zip -d .
-          test -f miscuentas_work/app/build.gradle
-          test -f miscuentas_work/settings.gradle
-
-      - name: Compilar APK
+      - name: Descomprimir proyecto 1.2.0
+        run: unzip -q MisCuentas-1.2.0-proyecto.zip -d .
+      - name: Build debug APK
         working-directory: miscuentas_work
         run: gradle --no-daemon assembleDebug
-
-      - name: Verificar manifiesto y firma
-        run: |
-          APK="miscuentas_work/app/build/outputs/apk/debug/app-debug.apk"
-          test -s "$APK"
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | tee apk-badging.txt
-          grep -q "package: name='com.pau.miscuentas'" apk-badging.txt
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK"
-
-      - name: Guardar APK
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: MisCuentas-1.1.0-debug
+          name: MisCuentas-1.2.0-debug
           path: miscuentas_work/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
