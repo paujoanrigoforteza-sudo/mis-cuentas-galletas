@@ -21,56 +21,74 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Localizar proyecto Android
+      # El repositorio contiene el ZIP como archivo; primero hay que extraerlo.
+      - name: Extraer y localizar proyecto Android
         shell: bash
         run: |
-          if [ -f app/build.gradle ]; then
-            echo "PROJECT_DIR=." >> "$GITHUB_ENV"
-          elif [ -f miscuentas_v160/app/build.gradle ]; then
-            echo "PROJECT_DIR=miscuentas_v160" >> "$GITHUB_ENV"
+          set -euo pipefail
+
+          if [ -f "app/build.gradle" ]; then
+            PROJECT_DIR="$GITHUB_WORKSPACE"
           else
-            echo "::error::No encuentro app/build.gradle en la raíz ni en miscuentas_v160/"
-            exit 1
+            ZIP_FILE="$(find "$GITHUB_WORKSPACE" -maxdepth 3 -type f \\
+              \( -iname 'MisCuentas_1.9.5.zip' -o -iname 'MisCuentas-1.9.5.zip' \\
+                 -o -iname '*1.9.5*.zip' \) | head -n 1)"
+
+            if [ -z "$ZIP_FILE" ]; then
+              echo "::error::No encuentro el ZIP de MisCuentas 1.9.5 en el repositorio."
+              echo "Sube MisCuentas_1.9.5.zip al repositorio, preferiblemente en la raíz."
+              exit 1
+            fi
+
+            mkdir -p "$RUNNER_TEMP/miscuentas-project"
+            unzip -q "$ZIP_FILE" -d "$RUNNER_TEMP/miscuentas-project"
+
+            BUILD_FILE="$(find "$RUNNER_TEMP/miscuentas-project" -type f \\
+              -path '*/app/build.gradle' | head -n 1)"
+
+            if [ -z "$BUILD_FILE" ]; then
+              echo "::error::El ZIP se ha extraído, pero no contiene app/build.gradle."
+              exit 1
+            fi
+
+            PROJECT_DIR="$(dirname "$(dirname "$BUILD_FILE")")"
           fi
 
-      - name: Configurar Android SDK sin paquete obsoleto tools
+          echo "Proyecto localizado en: $PROJECT_DIR"
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+      - name: Configurar Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Instalar componentes Android
         shell: bash
         run: |
-          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME}}"
-          if [ -z "$SDK_ROOT" ]; then
-            echo "::error::Android SDK no está preinstalado en el runner"
-            exit 1
-          fi
-          SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager 2>/dev/null | sort | tail -n 1)"
-          if [ -z "$SDKMANAGER" ]; then
-            echo "::error::No encuentro sdkmanager en $SDK_ROOT/cmdline-tools"
-            exit 1
-          fi
-          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
-          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
-          echo "$(dirname "$SDKMANAGER")" >> "$GITHUB_PATH"
-          yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+          set -euo pipefail
+          sdkmanager --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
       - name: Instalar Gradle 8.9
         shell: bash
         run: |
-          curl --fail --location --retry 8 --retry-all-errors https://services.gradle.org/distributions/gradle-8.9-bin.zip --output "$RUNNER_TEMP/gradle.zip"
+          curl --fail --location --retry 8 --retry-all-errors \\
+            https://services.gradle.org/distributions/gradle-8.9-bin.zip \\
+            --output "$RUNNER_TEMP/gradle.zip"
           unzip -q "$RUNNER_TEMP/gradle.zip" -d "$RUNNER_TEMP"
           echo "$RUNNER_TEMP/gradle-8.9/bin" >> "$GITHUB_PATH"
 
       - name: Validar versión y JavaScript
         shell: bash
         run: |
+          set -euo pipefail
           cd "$PROJECT_DIR"
           grep -Eq "versionCode[[:space:]]+31" app/build.gradle
           grep -Eq "versionName[[:space:]]+['\"]1\.9\.5['\"]" app/build.gradle
+
           python3 - <<'PY'
           import re
-          p='app/src/main/assets/index.html'
-          html=open(p,encoding='utf-8').read()
-          scripts=re.findall(r'<script[^>]*>(.*?)</script>',html,re.S|re.I)
-          open('/tmp/miscuentas-1.9.5.js','w',encoding='utf-8').write('\n'.join(scripts))
+          p = 'app/src/main/assets/index.html'
+          html = open(p, encoding='utf-8').read()
+          scripts = re.findall(r'<script[^>]*>(.*?)</script>', html, re.S | re.I)
+          open('/tmp/miscuentas-1.9.5.js', 'w', encoding='utf-8').write('\n'.join(scripts))
           PY
           node --check /tmp/miscuentas-1.9.5.js
 
@@ -83,7 +101,8 @@ jobs:
       - name: Preparar APK con nombre de versión
         shell: bash
         run: |
-          cp "$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk" "$GITHUB_WORKSPACE/MisCuentas-1.9.5-v31.apk"
+          cp "$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk" \\
+            "$GITHUB_WORKSPACE/MisCuentas-1.9.5-v31.apk"
 
       - name: Publicar APK con nombre de versión
         uses: actions/upload-artifact@v4
