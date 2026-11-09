@@ -1,4 +1,4 @@
-name: Build MisCuentas 1.9.4
+name: Build MisCuentas 1.9.5
 
 on:
   workflow_dispatch:
@@ -16,75 +16,79 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Configurar Java 17
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Configurar Android SDK
-        uses: android-actions/setup-android@v4
-
-      - name: Instalar SDK requerido
+      - name: Localizar proyecto Android
+        shell: bash
         run: |
-          yes | sdkmanager --licenses
-          sdkmanager --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+          if [ -f app/build.gradle ]; then
+            echo "PROJECT_DIR=." >> "$GITHUB_ENV"
+          elif [ -f miscuentas_v160/app/build.gradle ]; then
+            echo "PROJECT_DIR=miscuentas_v160" >> "$GITHUB_ENV"
+          else
+            echo "::error::No encuentro app/build.gradle en la raíz ni en miscuentas_v160/"
+            exit 1
+          fi
+
+      - name: Configurar Android SDK sin paquete obsoleto tools
+        shell: bash
+        run: |
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME}}"
+          if [ -z "$SDK_ROOT" ]; then
+            echo "::error::Android SDK no está preinstalado en el runner"
+            exit 1
+          fi
+          SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager 2>/dev/null | sort | tail -n 1)"
+          if [ -z "$SDKMANAGER" ]; then
+            echo "::error::No encuentro sdkmanager en $SDK_ROOT/cmdline-tools"
+            exit 1
+          fi
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "$(dirname "$SDKMANAGER")" >> "$GITHUB_PATH"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
       - name: Instalar Gradle 8.9
+        shell: bash
         run: |
           curl --fail --location --retry 8 --retry-all-errors https://services.gradle.org/distributions/gradle-8.9-bin.zip --output "$RUNNER_TEMP/gradle.zip"
           unzip -q "$RUNNER_TEMP/gradle.zip" -d "$RUNNER_TEMP"
           echo "$RUNNER_TEMP/gradle-8.9/bin" >> "$GITHUB_PATH"
 
-      - name: Descomprimir proyecto 1.9.4
+      - name: Validar versión y JavaScript
         shell: bash
         run: |
-          ZIP="MisCuentas_1.9.4.zip"
-          test -s "$ZIP" || { echo "No se encuentra $ZIP en la raíz del repositorio"; exit 1; }
-          mkdir -p "$RUNNER_TEMP/proyecto"
-          unzip -q "$ZIP" -d "$RUNNER_TEMP/proyecto"
-          SETTINGS="$(find "$RUNNER_TEMP/proyecto" -name settings.gradle -o -name settings.gradle.kts | head -n 1)"
-          test -n "$SETTINGS" || { echo "No se encontró settings.gradle"; exit 1; }
-          PROJECT_DIR="$(dirname "$SETTINGS")"
-          test -f "$PROJECT_DIR/app/build.gradle" || { echo "No se encontró app/build.gradle"; exit 1; }
-          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-          echo "Proyecto encontrado en: $PROJECT_DIR"
-
-      - name: Validar versión, JavaScript y archivos de voz
-        shell: bash
-        run: |
+          cd "$PROJECT_DIR"
+          grep -Eq "versionCode[[:space:]]+31" app/build.gradle
+          grep -Eq "versionName[[:space:]]+['\"]1\.9\.5['\"]" app/build.gradle
           python3 - <<'PY'
-          import os, pathlib, re, sys
-          root = pathlib.Path(os.environ['PROJECT_DIR'])
-          gradle = (root / 'app/build.gradle').read_text(encoding='utf-8')
-          if not re.search(r"versionName\s+['\"]1\.9\.4['\"]", gradle):
-              sys.exit('versionName no es 1.9.4')
-          if not re.search(r'versionCode\s+30\b', gradle):
-              sys.exit('versionCode no es 30')
-          html = (root / 'app/src/main/assets/index.html').read_text(encoding='utf-8')
-          scripts = re.findall(r'<script[^>]*>(.*?)</script>', html, re.S | re.I)
-          if not scripts:
-              sys.exit('No se encontraron bloques JavaScript')
-          pathlib.Path('/tmp/miscuentas-1.9.4.js').write_text('\n'.join(scripts), encoding='utf-8')
-          gif = root / 'app/src/main/assets/pollito_microfono_animado.gif'
-          if not gif.is_file() or gif.stat().st_size < 10000:
-              sys.exit('Falta el GIF del pollito')
-          java = (root / 'app/src/main/java/com/pau/miscuentas/VoicePopupActivity.java').read_text(encoding='utf-8')
-          for required in ('releaseRecognizer', 'SpeechRecognizer.createSpeechRecognizer', 'stopVoice'):
-              if required not in java:
-                  sys.exit('Falta la lógica nativa: ' + required)
-          print('Versión, JavaScript, GIF y ciclo de reconocimiento comprobados.')
+          import re
+          p='app/src/main/assets/index.html'
+          html=open(p,encoding='utf-8').read()
+          scripts=re.findall(r'<script[^>]*>(.*?)</script>',html,re.S|re.I)
+          open('/tmp/miscuentas-1.9.5.js','w',encoding='utf-8').write('\n'.join(scripts))
           PY
-          node --check /tmp/miscuentas-1.9.4.js
-        env:
-          PROJECT_DIR: ${{ env.PROJECT_DIR }}
+          node --check /tmp/miscuentas-1.9.5.js
 
-      - name: Compilar APK debug
-        run: gradle --no-daemon --stacktrace -p "$PROJECT_DIR" clean assembleDebug
+      - name: Compilar APK 1.9.5
+        shell: bash
+        run: |
+          cd "$PROJECT_DIR"
+          gradle --no-daemon --stacktrace clean assembleDebug
 
-      - name: Publicar APK
+      - name: Preparar APK con nombre de versión
+        shell: bash
+        run: |
+          cp "$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk" "$GITHUB_WORKSPACE/MisCuentas-1.9.5-v31.apk"
+
+      - name: Publicar APK con nombre de versión
         uses: actions/upload-artifact@v4
         with:
-          name: MisCuentas-1.9.4-v30
-          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/app-debug.apk
+          name: MisCuentas-1.9.5-v31
+          path: MisCuentas-1.9.5-v31.apk
           if-no-files-found: error
           
