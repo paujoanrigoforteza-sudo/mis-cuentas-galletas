@@ -22,7 +22,6 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      # Evita instalar el paquete antiguo "tools", que Google ya ha retirado.
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
         with:
@@ -36,8 +35,8 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Descomprimir proyecto 1.2.0
-        run: unzip -q MisCuentas-1.2.0-proyecto-corregido.zip -d .
+      - name: Descomprimir proyecto 1.2.1
+        run: unzip -q MisCuentas-1.2.1-proyecto.zip -d .
 
       - name: Build debug APK
         working-directory: miscuentas_work
@@ -46,5 +45,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: MisCuentas-1.2.0-debug
+          name: MisCuentas-1.2.1-debug
           path: miscuentas_work/app/build/outputs/apk/debug/app-debug.apk
