@@ -1,16 +1,16 @@
-name: Build MisCuentas 1.9.6
+
+name: Build MisCuentas 1.9.5
 
 on:
   workflow_dispatch:
   push:
-    branches: [main, master]
-
-permissions:
-  contents: read
+    branches:
+      - main
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Descargar repositorio
         uses: actions/checkout@v4
@@ -22,20 +22,25 @@ jobs:
           java-version: '17'
 
       - name: Configurar Android SDK
-        uses: android-actions/setup-android@v4
-        with:
-          accept-android-sdk-licenses: true
-          packages: ''
+        uses: android-actions/setup-android@v3
 
       - name: Instalar componentes Android necesarios
         shell: bash
         run: |
-          set -euo pipefail
-          yes | sdkmanager --licenses >/dev/null
-          sdkmanager --install \
-            "platform-tools" \
-            "platforms;android-35" \
-            "build-tools;35.0.0"
+          set -e
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+
+          if [ ! -f "$SDKMANAGER" ]; then
+            SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f | head -n 1)"
+          fi
+
+          if [ -z "$SDKMANAGER" ] || [ ! -f "$SDKMANAGER" ]; then
+            echo "No se encuentra sdkmanager"
+            exit 1
+          fi
+
+          "$SDKMANAGER" --licenses </dev/null || true
+          "$SDKMANAGER" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
       - name: Instalar Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
@@ -46,60 +51,96 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ -f app/build.gradle ]; then
-            echo "PROJECT_DIR=." >> "$GITHUB_ENV"
-          else
-            ZIP_FILE="$(find . -maxdepth 2 -type f -iname 'MisCuentas_1.9.6.zip' -print -quit)"
-            if [ -z "$ZIP_FILE" ]; then
-              ZIP_FILE="$(find . -maxdepth 2 -type f -iname '*.zip' -print -quit)"
-            fi
-            if [ -z "$ZIP_FILE" ]; then
-              echo "::error::No encuentro el proyecto Android ni un ZIP del proyecto."
-              exit 1
-            fi
-            mkdir -p "$RUNNER_TEMP/miscuentas-src"
-            unzip -q "$ZIP_FILE" -d "$RUNNER_TEMP/miscuentas-src"
-            PROJECT="$(find "$RUNNER_TEMP/miscuentas-src" -type f -path '*/app/build.gradle' -print -quit | sed 's#/app/build.gradle$##')"
-            if [ -z "$PROJECT" ]; then
-              echo "::error::El ZIP no contiene app/build.gradle."
-              exit 1
-            fi
-            echo "PROJECT_DIR=$PROJECT" >> "$GITHUB_ENV"
+
+          ZIP="MisCuentas_1.9.5.zip"
+
+          if [ ! -f "$ZIP" ]; then
+            echo "No se encuentra $ZIP en la raíz del repositorio"
+            ls -la
+            exit 1
           fi
 
-      - name: Validar versión y JavaScript
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd "$PROJECT_DIR"
-          grep -Eq "versionCode[[:space:]]+32" app/build.gradle
-          grep -Eq "versionName[[:space:]]+['\"]1\.9\.6['\"]" app/build.gradle
-          python3 - <<'PY'
-          import re
-          p='app/src/main/assets/index.html'
-          html=open(p,encoding='utf-8').read()
-          scripts=re.findall(r'<script[^>]*>(.*?)</script>',html,re.S|re.I)
-          open('/tmp/miscuentas-1.9.6.js','w',encoding='utf-8').write('\n'.join(scripts))
-          PY
-          node --check /tmp/miscuentas-1.9.6.js
+          mkdir -p proyecto_extraido
+          unzip -q "$ZIP" -d proyecto_extraido
 
-      - name: Compilar APK 1.9.6
+          SETTINGS="$(find proyecto_extraido -type f \( -name settings.gradle -o -name settings.gradle.kts \) | head -n 1)"
+
+          if [ -z "$SETTINGS" ]; then
+            echo "No se encuentra settings.gradle dentro del ZIP"
+            find proyecto_extraido -maxdepth 4 -type f | head -n 100
+            exit 1
+          fi
+
+          PROJECT_DIR="$(dirname "$SETTINGS")"
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+          if [ ! -f "$PROJECT_DIR/app/build.gradle" ] && [ ! -f "$PROJECT_DIR/app/build.gradle.kts" ]; then
+            echo "No se encuentra la configuración Gradle de la aplicación"
+            exit 1
+          fi
+
+          echo "Proyecto localizado en: $PROJECT_DIR"
+
+      - name: Validar versión 1.9.5
         shell: bash
         run: |
-          set -euo pipefail
+          set -e
+
+          GRADLE_FILE="$PROJECT_DIR/app/build.gradle"
+          if [ ! -f "$GRADLE_FILE" ]; then
+            GRADLE_FILE="$PROJECT_DIR/app/build.gradle.kts"
+          fi
+
+          echo "Comprobando configuración de versión..."
+
+          grep -E 'versionName[[:space:]]*[= ]*["'\'']1\.9\.5["'\'']' "$GRADLE_FILE" || {
+            echo "ERROR: versionName no es 1.9.5"
+            exit 1
+          }
+
+          grep -E 'versionCode[[:space:]]*[= ]*31' "$GRADLE_FILE" || {
+            echo "ERROR: versionCode no es 31"
+            exit 1
+          }
+
+      - name: Validar JavaScript
+        shell: bash
+        run: |
+          set -e
+          find "$PROJECT_DIR" -type f -name "*.js" -not -path "*/node_modules/*" -print0 |
+          while IFS= read -r -d '' file; do
+            node --check "$file"
+          done
+
+      - name: Compilar APK 1.9.5
+        shell: bash
+        run: |
+          set -e
           cd "$PROJECT_DIR"
-          gradle --no-daemon --stacktrace clean assembleDebug
+          gradle clean assembleDebug
 
       - name: Preparar APK con nombre de versión
         shell: bash
         run: |
-          set -euo pipefail
-          cp "$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk" "$GITHUB_WORKSPACE/MisCuentas-1.9.6-v32.apk"
+          set -e
+
+          APK="$(find "$PROJECT_DIR/app/build/outputs/apk/debug" -type f -name "*.apk" | head -n 1)"
+
+          if [ -z "$APK" ]; then
+            echo "No se ha generado ningún APK"
+            exit 1
+          fi
+
+          mkdir -p salida
+          cp "$APK" "salida/MisCuentas-1.9.5-v31.apk"
+
+          ls -lh salida/
 
       - name: Publicar APK con nombre de versión
         uses: actions/upload-artifact@v4
         with:
-          name: MisCuentas-1.9.6-v32
-          path: MisCuentas-1.9.6-v32.apk
+          name: MisCuentas-1.9.5-v31
+          path: salida/MisCuentas-1.9.5-v31.apk
           if-no-files-found: error
+          retention-days: 30
           
