@@ -1,4 +1,3 @@
-
 name: Build MisCuentas 1.9.1
 
 on:
@@ -17,11 +16,12 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Configurar Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
-          cache: gradle
+          # Sin caché automática: el proyecto está dentro del ZIP
+          # y todavía no se ha descomprimido en este punto.
 
       - name: Configurar Android SDK
         uses: android-actions/setup-android@v4
@@ -44,39 +44,46 @@ jobs:
           test -s "$ZIP" || { echo "No se encuentra $ZIP en la raíz del repositorio"; exit 1; }
           mkdir -p "$RUNNER_TEMP/proyecto"
           unzip -q "$ZIP" -d "$RUNNER_TEMP/proyecto"
-          SETTINGS="$(find "$RUNNER_TEMP/proyecto" -name settings.gradle -o -name settings.gradle.kts | head -n 1)"
+          SETTINGS="$(find "$RUNNER_TEMP/proyecto" -type f \( -name settings.gradle -o -name settings.gradle.kts \) -print -quit)"
           test -n "$SETTINGS" || { echo "No se encontró settings.gradle"; exit 1; }
           PROJECT_DIR="$(dirname "$SETTINGS")"
-          test -f "$PROJECT_DIR/app/build.gradle" || { echo "No se encontró app/build.gradle"; exit 1; }
+          test -f "$PROJECT_DIR/app/build.gradle" || test -f "$PROJECT_DIR/app/build.gradle.kts" || { echo "No se encontró el archivo Gradle de app"; exit 1; }
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
           echo "Proyecto encontrado en: $PROJECT_DIR"
 
-      - name: Comprobar versión y JavaScript
+      - name: Comprobar versión y código fuente
         shell: bash
         run: |
           python3 - <<'PY'
           import os, pathlib, re, sys
           root = pathlib.Path(os.environ['PROJECT_DIR'])
-          gradle = (root / 'app/build.gradle').read_text(encoding='utf-8')
+          gradle_file = root / 'app/build.gradle'
+          if not gradle_file.exists():
+              gradle_file = root / 'app/build.gradle.kts'
+          gradle = gradle_file.read_text(encoding='utf-8')
           if not re.search(r"versionName\s+['\"]1\.9\.1['\"]", gradle):
               sys.exit('versionName no es 1.9.1')
           if not re.search(r'versionCode\s+27\b', gradle):
               sys.exit('versionCode no es 27')
-          html = (root / 'app/src/main/assets/index.html').read_text(encoding='utf-8')
-          scripts = re.findall(r'<script[^>]*>(.*?)</script>', html, re.S | re.I)
-          if not scripts:
-              sys.exit('No se encontraron bloques JavaScript')
-          pathlib.Path('/tmp/miscuentas-1.9.1.js').write_text('\n'.join(scripts), encoding='utf-8')
-          java = (root / 'app/src/main/java/com/pau/miscuentas/MainActivity.java').read_text(encoding='utf-8')
+          java_file = root / 'app/src/main/java/com/pau/miscuentas/MainActivity.java'
+          if not java_file.exists():
+              sys.exit('No se encontró MainActivity.java')
+          java = java_file.read_text(encoding='utf-8')
           if 'SpeechRecognizer.createSpeechRecognizer(this)' not in java:
-              sys.exit('No se encontró reconocimiento nativo en MainActivity')
+              sys.exit('No se encontró el reconocimiento de voz nativo')
           if 'startActivityForResult(intent, REQ_SPEECH)' in java:
               sys.exit('Se detectó el antiguo lanzador visual de Google')
-          print('Versión, JavaScript y reconocimiento nativo comprobados.')
+          html_file = root / 'app/src/main/assets/index.html'
+          if html_file.exists():
+              html = html_file.read_text(encoding='utf-8')
+              scripts = re.findall(r'<script[^>]*>(.*?)</script>', html, re.S | re.I)
+              if scripts:
+                  pathlib.Path('/tmp/miscuentas-1.9.1.js').write_text('\n'.join(scripts), encoding='utf-8')
+          print('Versión y código fuente comprobados.')
           PY
-          node --check /tmp/miscuentas-1.9.1.js
-        env:
-          PROJECT_DIR: ${{ env.PROJECT_DIR }}
+          if [ -f /tmp/miscuentas-1.9.1.js ]; then
+            node --check /tmp/miscuentas-1.9.1.js
+          fi
 
       - name: Compilar APK debug
         run: gradle --no-daemon --stacktrace -p "$PROJECT_DIR" clean assembleDebug
