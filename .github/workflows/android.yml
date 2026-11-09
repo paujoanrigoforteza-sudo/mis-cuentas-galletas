@@ -1,12 +1,10 @@
 
-name: Build MisCuentas 1.9
+name: Build MisCuentas 1.9.1
 
 on:
   workflow_dispatch:
   push:
-    branches:
-      - main
-      - master
+    branches: [main, master]
 
 permissions:
   contents: read
@@ -14,7 +12,6 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Descargar repositorio
         uses: actions/checkout@v4
@@ -24,6 +21,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+          cache: gradle
 
       - name: Configurar Android SDK
         uses: android-actions/setup-android@v4
@@ -31,120 +29,62 @@ jobs:
       - name: Instalar SDK requerido
         run: |
           yes | sdkmanager --licenses
-          sdkmanager --install \
-            "platform-tools" \
-            "platforms;android-35" \
-            "build-tools;35.0.0"
+          sdkmanager --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
       - name: Instalar Gradle 8.9
         run: |
-          curl --fail --location --retry 8 --retry-all-errors \
-            https://services.gradle.org/distributions/gradle-8.9-bin.zip \
-            --output "$RUNNER_TEMP/gradle.zip"
+          curl --fail --location --retry 8 --retry-all-errors https://services.gradle.org/distributions/gradle-8.9-bin.zip --output "$RUNNER_TEMP/gradle.zip"
           unzip -q "$RUNNER_TEMP/gradle.zip" -d "$RUNNER_TEMP"
           echo "$RUNNER_TEMP/gradle-8.9/bin" >> "$GITHUB_PATH"
 
-      - name: Preparar proyecto 1.9
+      - name: Descomprimir proyecto 1.9.1
         shell: bash
         run: |
-          set -e
-
-          ZIP="MisCuentas_1.9.zip"
-
-          if [ -f "$ZIP" ]; then
-            mkdir -p "$RUNNER_TEMP/proyecto"
-            unzip -q "$ZIP" -d "$RUNNER_TEMP/proyecto"
-            SEARCH_DIR="$RUNNER_TEMP/proyecto"
-          else
-            SEARCH_DIR="$GITHUB_WORKSPACE"
-          fi
-
-          SETTINGS=$(find "$SEARCH_DIR" \
-            -name settings.gradle \
-            -not -path '*/.gradle/*' \
-            -print -quit)
-
-          if [ -z "$SETTINGS" ]; then
-            SETTINGS=$(find "$SEARCH_DIR" \
-              -name settings.gradle.kts \
-              -not -path '*/.gradle/*' \
-              -print -quit)
-          fi
-
-          if [ -z "$SETTINGS" ]; then
-            echo "ERROR: No se encuentra settings.gradle"
-            exit 1
-          fi
-
+          ZIP="MisCuentas_1.9.1.zip"
+          test -s "$ZIP" || { echo "No se encuentra $ZIP en la raíz del repositorio"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/proyecto"
+          unzip -q "$ZIP" -d "$RUNNER_TEMP/proyecto"
+          SETTINGS="$(find "$RUNNER_TEMP/proyecto" -name settings.gradle -o -name settings.gradle.kts | head -n 1)"
+          test -n "$SETTINGS" || { echo "No se encontró settings.gradle"; exit 1; }
           PROJECT_DIR="$(dirname "$SETTINGS")"
-
-          if [ ! -f "$PROJECT_DIR/app/build.gradle" ] && \
-             [ ! -f "$PROJECT_DIR/app/build.gradle.kts" ]; then
-            echo "ERROR: No se encuentra app/build.gradle"
-            exit 1
-          fi
-
+          test -f "$PROJECT_DIR/app/build.gradle" || { echo "No se encontró app/build.gradle"; exit 1; }
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-          echo "Proyecto encontrado: $PROJECT_DIR"
+          echo "Proyecto encontrado en: $PROJECT_DIR"
 
-      - name: Verificar versión 1.9
+      - name: Comprobar versión y JavaScript
         shell: bash
-        run: |
-          set -e
-          GRADLE_FILE="$PROJECT_DIR/app/build.gradle"
-
-          grep -Fq "versionName '1.9'" "$GRADLE_FILE"
-          grep -Fq "versionCode 26" "$GRADLE_FILE"
-
-          echo "Versión comprobada: 1.9"
-          echo "Código de versión: 26"
-
-      - name: Validar JavaScript
         run: |
           python3 - <<'PY'
-          import re
-          import os
-          from pathlib import Path
-
-          project = Path(os.environ["PROJECT_DIR"])
-          html = project / "app/src/main/assets/index.html"
-
-          if not html.exists():
-              raise SystemExit("ERROR: No se encuentra index.html")
-
-          content = html.read_text(encoding="utf-8")
-          scripts = re.findall(
-              r"<script[^>]*>(.*?)</script>",
-              content,
-              re.S | re.I
-          )
-
+          import os, pathlib, re, sys
+          root = pathlib.Path(os.environ['PROJECT_DIR'])
+          gradle = (root / 'app/build.gradle').read_text(encoding='utf-8')
+          if not re.search(r"versionName\s+['\"]1\.9\.1['\"]", gradle):
+              sys.exit('versionName no es 1.9.1')
+          if not re.search(r'versionCode\s+27\b', gradle):
+              sys.exit('versionCode no es 27')
+          html = (root / 'app/src/main/assets/index.html').read_text(encoding='utf-8')
+          scripts = re.findall(r'<script[^>]*>(.*?)</script>', html, re.S | re.I)
           if not scripts:
-              raise SystemExit("ERROR: No se encontraron scripts")
-
-          Path("/tmp/miscuentas.js").write_text(
-              "\n".join(scripts),
-              encoding="utf-8"
-          )
+              sys.exit('No se encontraron bloques JavaScript')
+          pathlib.Path('/tmp/miscuentas-1.9.1.js').write_text('\n'.join(scripts), encoding='utf-8')
+          java = (root / 'app/src/main/java/com/pau/miscuentas/MainActivity.java').read_text(encoding='utf-8')
+          if 'SpeechRecognizer.createSpeechRecognizer(this)' not in java:
+              sys.exit('No se encontró reconocimiento nativo en MainActivity')
+          if 'startActivityForResult(intent, REQ_SPEECH)' in java:
+              sys.exit('Se detectó el antiguo lanzador visual de Google')
+          print('Versión, JavaScript y reconocimiento nativo comprobados.')
           PY
+          node --check /tmp/miscuentas-1.9.1.js
+        env:
+          PROJECT_DIR: ${{ env.PROJECT_DIR }}
 
-          node --check /tmp/miscuentas.js
-
-      - name: Compilar APK 1.9
-        run: |
-          gradle --no-daemon --stacktrace \
-            -p "$PROJECT_DIR" clean assembleDebug
-
-      - name: Preparar APK con nombre de versión
-        run: |
-          mkdir -p "$RUNNER_TEMP/apk"
-          cp "$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk" \
-            "$RUNNER_TEMP/apk/MisCuentas-1.9-v26.apk"
+      - name: Compilar APK debug
+        run: gradle --no-daemon --stacktrace -p "$PROJECT_DIR" clean assembleDebug
 
       - name: Publicar APK
         uses: actions/upload-artifact@v4
         with:
-          name: MisCuentas-1.9-v26
-          path: ${{ runner.temp }}/apk/MisCuentas-1.9-v26.apk
+          name: MisCuentas-1.9.1-v27
+          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           
