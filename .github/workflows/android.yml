@@ -1,4 +1,4 @@
-name: Build MisCuentas 1.9.9
+name: Build MisCuentas 1.9.10
 
 on:
   workflow_dispatch:
@@ -49,9 +49,9 @@ jobs:
           if [ -f app/build.gradle ]; then
             echo "PROJECT_DIR=." >> "$GITHUB_ENV"
           else
-            ZIP_FILE="$(find . -maxdepth 2 -type f -iname 'MisCuentas_1.9.9_proyecto.zip' -print -quit)"
+            ZIP_FILE="$(find . -maxdepth 2 -type f -iname 'MisCuentas_1.9.10_proyecto.zip' -print -quit)"
             if [ -z "$ZIP_FILE" ]; then
-              echo "::error::No encuentro MisCuentas_1.9.9_proyecto.zip. Archivos ZIP disponibles:"
+              echo "::error::No encuentro MisCuentas_1.9.10_proyecto.zip. Archivos ZIP disponibles:"
               find . -maxdepth 2 -type f -iname '*.zip' -print
               exit 1
             fi
@@ -72,17 +72,17 @@ jobs:
           set -euo pipefail
           cd "$PROJECT_DIR"
           grep -Eq "versionCode[[:space:]]+35" app/build.gradle || { echo "::error::versionCode no es 35 en app/build.gradle"; exit 1; }
-          grep -Eq "versionName[[:space:]]+['\"]1\.9\.9['\"]" app/build.gradle || { echo "::error::versionName no es 1.9.9 en app/build.gradle"; exit 1; }
+          grep -Eq "versionName[[:space:]]+['\"]1\.9\.9['\"]" app/build.gradle || { echo "::error::versionName no es 1.9.10 en app/build.gradle"; exit 1; }
           python3 - <<'PY'
           import re
           p='app/src/main/assets/index.html'
           html=open(p,encoding='utf-8').read()
           scripts=re.findall(r'<script[^>]*>(.*?)</script>',html,re.S|re.I)
-          open('/tmp/miscuentas-1.9.9.js','w',encoding='utf-8').write('\n'.join(scripts))
+          open('/tmp/miscuentas-1.9.10.js','w',encoding='utf-8').write('\n'.join(scripts))
           PY
-          node --check /tmp/miscuentas-1.9.9.js
+          node --check /tmp/miscuentas-1.9.10.js
 
-      - name: Compilar APK 1.9.9
+      - name: Compilar APK 1.9.10
         shell: bash
         run: |
           set -euo pipefail
@@ -93,12 +93,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cp "$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk" "$GITHUB_WORKSPACE/MisCuentas-1.9.9-v35.apk"
+          cp "$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk" "$GITHUB_WORKSPACE/MisCuentas-1.9.10-v35.apk"
 
       - name: Publicar APK con nombre de versión
         uses: actions/upload-artifact@v4
         with:
-          name: MisCuentas-1.9.9-v35
-          path: MisCuentas-1.9.9-v35.apk
+          name: MisCuentas-1.9.10-v35
+          path: MisCuentas-1.9.10-v35.apk
           if-no-files-found: error
           
