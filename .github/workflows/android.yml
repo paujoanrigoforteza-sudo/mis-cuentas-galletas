@@ -25,7 +25,10 @@ jobs:
         uses: android-actions/setup-android@v3
         with:
           accept-android-sdk-licenses: true
-          packages: 'platform-tools, platforms;android-35, build-tools;35.0.0'
+          packages: |
+            platform-tools
+            platforms;android-35
+            build-tools;35.0.0
 
       - name: Instalar Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
@@ -92,4 +95,3 @@ jobs:
           name: MisCuentas-1.9.6-v32
           path: MisCuentas-1.9.6-v32.apk
           if-no-files-found: error
-          
