@@ -1,32 +1,48 @@
 name: Build MisCuentas APK
+
 on:
   workflow_dispatch:
   push:
     branches: [ main, master ]
+
 permissions:
   contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
+
+      # Evita instalar el paquete antiguo "tools", que Google ya ha retirado.
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools'
+
       - name: Install Android SDK packages
-        run: sdkmanager 'platform-tools' 'platforms;android-35' 'build-tools;35.0.0'
+        run: |
+          sdkmanager --install "platforms;android-35" "build-tools;35.0.0"
+          yes | sdkmanager --licenses
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
+
       - name: Descomprimir proyecto 1.2.0
         run: unzip -q MisCuentas-1.2.0-proyecto.zip -d .
+
       - name: Build debug APK
         working-directory: miscuentas_work
         run: gradle --no-daemon assembleDebug
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
