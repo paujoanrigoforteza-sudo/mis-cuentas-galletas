@@ -28,32 +28,41 @@ jobs:
           if [ -f "$GITHUB_WORKSPACE/app/build.gradle" ]; then
             PROJECT_DIR="$GITHUB_WORKSPACE"
           else
-            ZIP_FILE="$(find "$GITHUB_WORKSPACE" -maxdepth 3 -type f -name '*.zip' | grep '1.9.5' | head -n 1 || true)"
+            ZIP_FILE=$(find "$GITHUB_WORKSPACE" -maxdepth 3 -type f -iname '*1.9.5*.zip' -print -quit)
             if [ -z "$ZIP_FILE" ]; then
-              echo "::error::No encuentro el ZIP de MisCuentas 1.9.5. Súbelo al repositorio."
+              echo "::error::No encuentro el ZIP 1.9.5 en el repositorio."
               exit 1
             fi
             mkdir -p "$RUNNER_TEMP/miscuentas-project"
             unzip -q "$ZIP_FILE" -d "$RUNNER_TEMP/miscuentas-project"
-            BUILD_FILE="$(find "$RUNNER_TEMP/miscuentas-project" -type f -path '*/app/build.gradle' | head -n 1 || true)"
+            BUILD_FILE=$(find "$RUNNER_TEMP/miscuentas-project" -type f -path '*/app/build.gradle' -print -quit)
             if [ -z "$BUILD_FILE" ]; then
               echo "::error::El ZIP no contiene app/build.gradle."
               exit 1
             fi
-            PROJECT_DIR="$(dirname "$(dirname "$BUILD_FILE")")"
+            PROJECT_DIR=$(dirname "$(dirname "$BUILD_FILE")")
           fi
-          echo "Proyecto localizado en: $PROJECT_DIR"
+          echo "Proyecto localizado: $PROJECT_DIR"
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-      - name: Configurar Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Instalar componentes Android
+      # GitHub-hosted ubuntu-latest ya incluye Android SDK y cmdline-tools.
+      # No usar android-actions/setup-android: su acción intenta instalar el
+      # paquete obsoleto 'tools', que provoca el error 'Failed to find package'.
+      - name: Configurar Android SDK y aceptar licencias
         shell: bash
         run: |
           set -euo pipefail
-          yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+          if [ -z "${ANDROID_HOME:-}" ]; then
+            echo "::error::ANDROID_HOME no está definido en el runner."
+            exit 1
+          fi
+          SDKMANAGER=$(find "$ANDROID_HOME" -type f -name sdkmanager -path '*/cmdline-tools/*/bin/*' -print -quit)
+          if [ -z "$SDKMANAGER" ]; then
+            echo "::error::No se encuentra sdkmanager en Android SDK."
+            exit 1
+          fi
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
       - name: Instalar Gradle 8.9
         shell: bash
@@ -63,26 +72,34 @@ jobs:
           unzip -q "$RUNNER_TEMP/gradle.zip" -d "$RUNNER_TEMP"
           echo "$RUNNER_TEMP/gradle-8.9/bin" >> "$GITHUB_PATH"
 
-      - name: Validar versión del proyecto
+      - name: Validar versión y JavaScript
         shell: bash
         run: |
           set -euo pipefail
           cd "$PROJECT_DIR"
-          grep -Eq "versionCode[[:space:]]+31" app/build.gradle
-          grep -Eq "versionName[[:space:]]+'1\\.9\\.5'" app/build.gradle
-          echo "Versión 1.9.5 (31) confirmada."
+          grep -Eq 'versionCode[[:space:]]+31' app/build.gradle
+          grep -Eq "versionName[[:space:]]+['\"]1\.9\.5['\"]" app/build.gradle
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          html_path = Path("app/src/main/assets/index.html")
+          if not html_path.exists():
+              raise SystemExit("No existe app/src/main/assets/index.html")
+          html = html_path.read_text(encoding="utf-8")
+          scripts = re.findall(r"<script[^>]*>(.*?)</script>", html, re.S | re.I)
+          Path("/tmp/miscuentas-1.9.5.js").write_text("\n".join(scripts), encoding="utf-8")
+          PY
+          node --check /tmp/miscuentas-1.9.5.js
 
       - name: Compilar APK 1.9.5
         shell: bash
         run: |
-          set -euo pipefail
           cd "$PROJECT_DIR"
           gradle --no-daemon --stacktrace clean assembleDebug
 
       - name: Preparar APK con nombre de versión
         shell: bash
         run: |
-          set -euo pipefail
           cp "$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk" "$GITHUB_WORKSPACE/MisCuentas-1.9.5-v31.apk"
 
       - name: Publicar APK con nombre de versión
