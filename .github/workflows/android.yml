@@ -1,5 +1,5 @@
 
-name: Build MisCuentas 1.9.18
+name: Build MisCuentas 1.9.19
 
 on:
   workflow_dispatch:
@@ -55,32 +55,26 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ZIP_FILE="$GITHUB_WORKSPACE/MisCuentas_1.9.18.zip"
+          ZIP_FILE="$GITHUB_WORKSPACE/MisCuentas_1.9.19.zip"
 
           if [ -f "$GITHUB_WORKSPACE/app/build.gradle" ]; then
             PROJECT="$GITHUB_WORKSPACE"
           else
             test -s "$ZIP_FILE" || {
-              echo "::error::No encuentro MisCuentas_1.9.18.zip"
+              echo "::error::No encuentro MisCuentas_1.9.19.zip en la raíz del repositorio."
               exit 1
             }
-
             mkdir -p "$RUNNER_TEMP/miscuentas-src"
             unzip -q "$ZIP_FILE" -d "$RUNNER_TEMP/miscuentas-src"
-
             mapfile -t PROJECT_FILES < <(
-              find "$RUNNER_TEMP/miscuentas-src" \
-                -type f -path '*/app/build.gradle' -print
+              find "$RUNNER_TEMP/miscuentas-src" -type f -path '*/app/build.gradle' -print
             )
-
             if [ "${#PROJECT_FILES[@]}" -ne 1 ]; then
               echo "::error::El ZIP debe contener exactamente un app/build.gradle"
               exit 1
             fi
-
             PROJECT="${PROJECT_FILES[0]%/app/build.gradle}"
           fi
-
           echo "PROJECT_DIR=$PROJECT" >> "$GITHUB_ENV"
 
       - name: Validar versión, JavaScript, GIFs y sonidos
@@ -88,73 +82,46 @@ jobs:
         run: |
           set -euo pipefail
           cd "$PROJECT_DIR"
-
-          grep -Fq 'versionCode 44' app/build.gradle
-          grep -Fq 'versionName "1.9.18"' app/build.gradle
+          grep -Eq 'versionCode[[:space:]]+45([[:space:]]|$)' app/build.gradle
+          grep -Fq 'versionName "1.9.19"' app/build.gradle
+          grep -Fq 'MisCuentas 1.9.19' app/src/main/AndroidManifest.xml
 
           python3 - <<'PY'
           import re
-          from PIL import Image
           from pathlib import Path
+          from PIL import Image
 
           assets = Path('app/src/main/assets')
           html = (assets / 'index.html').read_text(encoding='utf-8')
-          scripts = re.findall(
-              r'<script[^>]*>(.*?)</script>',
-              html,
-              re.S | re.I
-          )
-
+          scripts = re.findall(r'<script[^>]*>(.*?)</script>', html, re.S | re.I)
           if not scripts:
               raise SystemExit('No se encontraron scripts JavaScript')
+          Path('/tmp/miscuentas-1.9.19.js').write_text('\n'.join(scripts), encoding='utf-8')
 
-          Path('/tmp/miscuentas-1.9.18.js').write_text(
-              '\n'.join(scripts),
-              encoding='utf-8'
-          )
-
-          required_gifs = {
+          required = {
               'miscuentas_splash.gif': 6,
               'chick_header_walk.gif': 30,
               'mascot_sale_notebook.gif': 12,
               'mascot_payment_backpack.gif': 12,
           }
-
-          for name, minimum in required_gifs.items():
+          for name, minimum in required.items():
               path = assets / name
-
               if not path.is_file():
                   raise SystemExit(f'Falta el GIF {name}')
-
               im = Image.open(path)
-
               if getattr(im, 'n_frames', 1) < minimum:
-                  raise SystemExit(
-                      f'{name} necesita al menos {minimum} fotogramas'
-                  )
-
+                  raise SystemExit(f'{name} necesita al menos {minimum} fotogramas')
               if name != 'miscuentas_splash.gif':
                   im.seek(0)
-                  alpha = im.convert('RGBA').getchannel('A')
-
-                  if alpha.getextrema()[0] != 0:
-                      raise SystemExit(
-                          f'{name} no conserva transparencia real'
-                      )
-
-          for name in [
-              'sounds/pencil-writing-02.mp3',
-              'sounds/office-cash-register-12.mp3',
-          ]:
-              path = assets / name
-
-              if not path.is_file() or path.stat().st_size == 0:
-                  raise SystemExit(f'Falta el sonido {name}')
+                  if im.convert('RGBA').getchannel('A').getextrema()[0] != 0:
+                      raise SystemExit(f'{name} no conserva transparencia real')
           PY
 
-          node --check /tmp/miscuentas-1.9.18.js
+          node --check /tmp/miscuentas-1.9.19.js
+          test -s app/src/main/assets/sounds/pencil-writing-02.mp3
+          test -s app/src/main/assets/sounds/office-cash-register-12.mp3
 
-      - name: Compilar APK 1.9.18
+      - name: Compilar APK 1.9.19
         shell: bash
         run: |
           set -euo pipefail
@@ -166,12 +133,12 @@ jobs:
         run: |
           set -euo pipefail
           cp "$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk" \
-            "$GITHUB_WORKSPACE/MisCuentas-1.9.18-v44.apk"
+            "$GITHUB_WORKSPACE/MisCuentas-1.9.19-v45.apk"
 
       - name: Publicar APK
         uses: actions/upload-artifact@v4
         with:
-          name: MisCuentas-1.9.18-v44
-          path: MisCuentas-1.9.18-v44.apk
+          name: MisCuentas-1.9.19-v45
+          path: MisCuentas-1.9.19-v45.apk
           if-no-files-found: error
           
