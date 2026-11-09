@@ -1,4 +1,4 @@
-name: Build MisCuentas 1.9.14
+name: Build MisCuentas 1.9.15
 
 on:
   workflow_dispatch:
@@ -30,7 +30,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sdkmanager --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+          sdkmanager --install \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0"
 
       - name: Instalar Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
@@ -41,14 +44,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          ZIP_FILE="$GITHUB_WORKSPACE/MisCuentas_1.9.15.zip"
           if [ -f "$GITHUB_WORKSPACE/app/build.gradle" ]; then
             PROJECT="$GITHUB_WORKSPACE"
           else
-            ZIP_FILE="$GITHUB_WORKSPACE/MisCuentas_1.9.14.zip"
-            if [ ! -f "$ZIP_FILE" ]; then
-              echo "::error::No encuentro MisCuentas_1.9.14.zip en la raíz del repositorio."
-              exit 1
-            fi
+            test -s "$ZIP_FILE" || { echo "::error::No encuentro MisCuentas_1.9.15.zip en la raíz del repositorio."; exit 1; }
             mkdir -p "$RUNNER_TEMP/miscuentas-src"
             unzip -q "$ZIP_FILE" -d "$RUNNER_TEMP/miscuentas-src"
             mapfile -t PROJECT_FILES < <(find "$RUNNER_TEMP/miscuentas-src" -type f -path '*/app/build.gradle' -print)
@@ -59,32 +59,33 @@ jobs:
             PROJECT="${PROJECT_FILES[0]%/app/build.gradle}"
           fi
           echo "PROJECT_DIR=$PROJECT" >> "$GITHUB_ENV"
-          echo "Proyecto localizado en: $PROJECT"
 
-      - name: Validar versión, JavaScript y animación
+      - name: Validar versión, JavaScript, GIFs transparentes y sonidos
         shell: bash
         run: |
           set -euo pipefail
           cd "$PROJECT_DIR"
-          grep -Eq 'versionCode[[:space:]]+40([[:space:]]|$)' app/build.gradle || { echo "::error::versionCode no es 40"; exit 1; }
-          grep -Eq 'versionName[[:space:]]+"1\.9\.14"' app/build.gradle || { echo "::error::versionName no es 1.9.14"; exit 1; }
+          grep -Eq 'versionCode[[:space:]]+41([[:space:]]|$)' app/build.gradle
+          grep -Eq 'versionName[[:space:]]+["\x27]1\.9\.15["\x27]' app/build.gradle
           python3 - <<'PY'
           import re
+          from PIL import Image
           p='app/src/main/assets/index.html'
           html=open(p,encoding='utf-8').read()
           scripts=re.findall(r'<script[^>]*>(.*?)</script>',html,re.S|re.I)
           if not scripts: raise SystemExit('No se encontraron scripts JavaScript')
-          open('/tmp/miscuentas-1.9.14.js','w',encoding='utf-8').write('\n'.join(scripts))
-          from PIL import Image
-          im=Image.open('app/src/main/assets/chick_header_walk.gif')
-          if im.n_frames < 12: raise SystemExit('La animación superior necesita al menos 12 fotogramas')
-          im.seek(0)
-          if im.convert('RGBA').getchannel('A').getextrema()[0] != 0: raise SystemExit('El GIF superior no tiene transparencia real')
+          open('/tmp/miscuentas-1.9.15.js','w',encoding='utf-8').write('\n'.join(scripts))
+          for name in ['chick_header_walk.gif','mascot_sale_notebook.gif','mascot_payment_backpack.gif']:
+              im=Image.open('app/src/main/assets/'+name)
+              if getattr(im,'n_frames',1)<12: raise SystemExit(name+' necesita al menos 12 fotogramas')
+              im.seek(0)
+              if im.convert('RGBA').getchannel('A').getextrema()[0] != 0: raise SystemExit(name+' no conserva transparencia real')
           PY
-          node --check /tmp/miscuentas-1.9.14.js
-          test -f app/src/main/assets/sounds/reclamar_carga.mp3 || { echo "::error::Falta el sonido local reclamar_carga.mp3"; exit 1; }
+          node --check /tmp/miscuentas-1.9.15.js
+          test -s app/src/main/assets/sounds/pencil-writing-02.mp3
+          test -s app/src/main/assets/sounds/office-cash-register-12.mp3
 
-      - name: Compilar APK 1.9.14
+      - name: Compilar APK 1.9.15
         shell: bash
         run: |
           set -euo pipefail
@@ -95,12 +96,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cp "$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk" "$GITHUB_WORKSPACE/MisCuentas-1.9.14-v40.apk"
+          cp "$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk" "$GITHUB_WORKSPACE/MisCuentas-1.9.15-v41.apk"
 
       - name: Publicar APK con nombre de versión
         uses: actions/upload-artifact@v4
         with:
-          name: MisCuentas-1.9.14-v40
-          path: MisCuentas-1.9.14-v40.apk
+          name: MisCuentas-1.9.15-v41
+          path: MisCuentas-1.9.15-v41.apk
           if-no-files-found: error
           
