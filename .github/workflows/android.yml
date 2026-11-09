@@ -49,14 +49,13 @@ jobs:
           if [ -f app/build.gradle ]; then
             echo "PROJECT_DIR=." >> "$GITHUB_ENV"
           else
-            ZIP_FILE="$(find . -maxdepth 2 -type f -iname 'MisCuentas_1.9.7_proyecto.zip' -print -quit)"
+            ZIP_FILE="$(find . -maxdepth 2 -type f -iname 'MisCuentas_1.9.8_proyecto.zip' -print -quit)"
             if [ -z "$ZIP_FILE" ]; then
-              ZIP_FILE="$(find . -maxdepth 2 -type f -iname '*.zip' -print -quit)"
-            fi
-            if [ -z "$ZIP_FILE" ]; then
-              echo "::error::No encuentro el proyecto Android ni un ZIP del proyecto."
+              echo "::error::No encuentro MisCuentas_1.9.8_proyecto.zip. Archivos ZIP disponibles:"
+              find . -maxdepth 2 -type f -iname '*.zip' -print
               exit 1
             fi
+            echo "Proyecto seleccionado: $ZIP_FILE"
             mkdir -p "$RUNNER_TEMP/miscuentas-src"
             unzip -q "$ZIP_FILE" -d "$RUNNER_TEMP/miscuentas-src"
             PROJECT="$(find "$RUNNER_TEMP/miscuentas-src" -type f -path '*/app/build.gradle' -print -quit | sed 's#/app/build.gradle$##')"
@@ -72,8 +71,8 @@ jobs:
         run: |
           set -euo pipefail
           cd "$PROJECT_DIR"
-          grep -Eq "versionCode[[:space:]]+34" app/build.gradle
-          grep -Eq "versionName[[:space:]]+['\"]1\.9\.8['\"]" app/build.gradle
+          grep -Eq "versionCode[[:space:]]+34" app/build.gradle || { echo "::error::versionCode no es 34 en app/build.gradle"; exit 1; }
+          grep -Eq "versionName[[:space:]]+['\"]1\.9\.8['\"]" app/build.gradle || { echo "::error::versionName no es 1.9.8 en app/build.gradle"; exit 1; }
           python3 - <<'PY'
           import re
           p='app/src/main/assets/index.html'
