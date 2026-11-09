@@ -1,4 +1,4 @@
-name: Build MisCuentas 1.5.0 APK
+name: Build MisCuentas 1.6.0 APK
 
 on:
   workflow_dispatch:
@@ -35,60 +35,41 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Locate or extract project and verify version
+      - name: Extract and verify exact project ZIP
         shell: bash
         run: |
           set -euo pipefail
-          PROJECT_DIR=""
-          if [[ -f "app/build.gradle" ]]; then
-            PROJECT_DIR="$PWD"
-          elif [[ -f "miscuentas_work/app/build.gradle" ]]; then
-            PROJECT_DIR="$PWD/miscuentas_work"
-          else
-            mkdir -p "$RUNNER_TEMP/miscuentas_extract"
-            while IFS= read -r -d '' archive; do
-              echo "Inspeccionando ZIP: $archive"
-              if unzip -Z1 "$archive" | grep -Eq '(^|/)app/build\.gradle$'; then
-                rm -rf "$RUNNER_TEMP/miscuentas_extract"
-                mkdir -p "$RUNNER_TEMP/miscuentas_extract"
-                unzip -q "$archive" -d "$RUNNER_TEMP/miscuentas_extract"
-                candidate="$(find "$RUNNER_TEMP/miscuentas_extract" -type f -path '*/app/build.gradle' -print -quit || true)"
-                if [[ -n "$candidate" ]] && grep -Fq "versionName '1.5.0'" "$candidate"; then
-                  PROJECT_DIR="$(dirname "$(dirname "$candidate")")"
-                  echo "Proyecto 1.5.0 extraído desde $archive"
-                  break
-                fi
-              fi
-            done < <(find . -maxdepth 3 -type f -iname '*.zip' -print0)
+          ZIP="MisCuentas-1.6.0-proyecto.zip"
+          test -s "$ZIP" || { echo "::error::No encuentro $ZIP en la raíz del repositorio"; exit 1; }
+          EXTRACT="$RUNNER_TEMP/miscuentas_1_6_0"
+          mkdir -p "$EXTRACT"
+          unzip -q "$ZIP" -d "$EXTRACT"
+          PROJECT_DIR="$EXTRACT"
+          if [[ ! -f "$PROJECT_DIR/app/build.gradle" ]]; then
+            CANDIDATE="$(find "$EXTRACT" -type f -path '*/app/build.gradle' -print -quit)"
+            test -n "$CANDIDATE" || { echo "::error::El ZIP no contiene app/build.gradle"; exit 1; }
+            PROJECT_DIR="$(dirname "$(dirname "$CANDIDATE")")"
           fi
-
-          if [[ -z "$PROJECT_DIR" ]]; then
-            echo "::error::No encuentro un proyecto MisCuentas 1.5.0. Sube el ZIP completo de esta versión a la raíz del repositorio o extrae su contenido."
-            find . -maxdepth 3 -type f | sort | head -200
-            exit 1
-          fi
-
           test -f "$PROJECT_DIR/app/src/main/assets/index.html"
-          grep -Fq "versionName '1.5.0'" "$PROJECT_DIR/app/build.gradle"
-          grep -Fq "versionCode 20" "$PROJECT_DIR/app/build.gradle"
-          grep -Fq 'android:label="MisCuentas 1.5.0"' "$PROJECT_DIR/app/src/main/AndroidManifest.xml"
+          grep -Fq "versionName '1.6.0'" "$PROJECT_DIR/app/build.gradle"
+          grep -Fq "versionCode 21" "$PROJECT_DIR/app/build.gradle"
+          grep -Fq 'android:label="MisCuentas 1.6.0"' "$PROJECT_DIR/app/src/main/AndroidManifest.xml"
           test -f "$PROJECT_DIR/app/src/main/java/com/pau/miscuentas/DebtPopupActivity.java"
-          test "$(grep -c 'private SpeechRecognizer speechRecognizer;' "$PROJECT_DIR/app/src/main/java/com/pau/miscuentas/MainActivity.java")" -eq 1
-
+          grep -Fq 'String oldest=item.optString("oldest"' "$PROJECT_DIR/app/src/main/java/com/pau/miscuentas/DebtPopupActivity.java"
+          test "$(grep -Fc 'private SpeechRecognizer speechRecognizer;' "$PROJECT_DIR/app/src/main/java/com/pau/miscuentas/MainActivity.java")" -eq 1
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-          echo "Proyecto verificado: $PROJECT_DIR"
 
       - name: Verify JavaScript syntax
         shell: bash
         run: |
           set -euo pipefail
-          python3 - "$PROJECT_DIR/app/src/main/assets/index.html" "$RUNNER_TEMP/miscuentas.js" <<'PY'
+          python3 - app/src/main/assets/index.html "$RUNNER_TEMP/miscuentas.js" <<'PY'
           import re, sys
-          html = open(sys.argv[1], encoding="utf-8").read()
-          scripts = re.findall(r"<script[^>]*>(.*?)</script>", html, re.S | re.I)
+          html = open(sys.argv[1], encoding='utf-8').read()
+          scripts = re.findall(r'<script[^>]*>(.*?)</script>', html, re.S | re.I)
           if not scripts:
-              raise SystemExit("No se encontró JavaScript en index.html")
-          open(sys.argv[2], "w", encoding="utf-8").write("\n".join(scripts))
+              raise SystemExit('No se encontró JavaScript en index.html')
+          open(sys.argv[2], 'w', encoding='utf-8').write('\n'.join(scripts))
           PY
           node --check "$RUNNER_TEMP/miscuentas.js"
 
@@ -100,15 +81,15 @@ jobs:
         run: |
           set -euo pipefail
           SOURCE="$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk"
-          DEST="MisCuentas-1.5.0.apk"
-          test -s "$SOURCE" || { echo "::error::No se ha generado el APK"; exit 1; }
+          DEST="MisCuentas-1.6.0.apk"
+          test -s "$SOURCE"
           cp "$SOURCE" "$DEST"
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$DEST" | grep -F "versionName='1.5.0'"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$DEST" | grep -F "versionName='1.6.0'"
           ls -lh "$DEST"
 
       - name: Upload versioned APK
         uses: actions/upload-artifact@v4
         with:
-          name: MisCuentas-1.5.0-APK
-          path: MisCuentas-1.5.0.apk
+          name: MisCuentas-1.6.0-APK
+          path: MisCuentas-1.6.0.apk
           if-no-files-found: error
