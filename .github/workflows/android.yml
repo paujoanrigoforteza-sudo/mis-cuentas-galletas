@@ -31,7 +31,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          yes | sdkmanager --licenses >/dev/null
+          # Las licencias ya se aceptan en setup-android@v4; no repetir este paso.
           sdkmanager --install \
             "platform-tools" \
             "platforms;android-35" \
@@ -49,7 +49,7 @@ jobs:
           if [ -f app/build.gradle ]; then
             echo "PROJECT_DIR=." >> "$GITHUB_ENV"
           else
-            ZIP_FILE="$(find . -maxdepth 2 -type f -iname 'MisCuentas_1.9.7_proyecto.zip' -print -quit)"
+            ZIP_FILE="$(find . -maxdepth 2 -type f -iname 'MisCuentas_1.9.7_proyecto_corregido.zip' -print -quit)"
             if [ -z "$ZIP_FILE" ]; then
               ZIP_FILE="$(find . -maxdepth 2 -type f -iname '*.zip' -print -quit)"
             fi
