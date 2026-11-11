@@ -1,5 +1,5 @@
 
-name: Build MisCuentas 1.9.24
+name: Build MisCuentas 1.9.25
 
 on:
   workflow_dispatch:
@@ -51,11 +51,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ZIP_FILE="$GITHUB_WORKSPACE/MisCuentas_1.9.24.zip"
+          ZIP_FILE="$GITHUB_WORKSPACE/MisCuentas_1.9.25.zip"
           if [ -f "$GITHUB_WORKSPACE/app/build.gradle" ]; then
             PROJECT="$GITHUB_WORKSPACE"
           else
-            test -s "$ZIP_FILE" || { echo "::error::No encuentro MisCuentas_1.9.24.zip en la raíz"; exit 1; }
+            test -s "$ZIP_FILE" || { echo "::error::No encuentro MisCuentas_1.9.25.zip en la raíz"; exit 1; }
             mkdir -p "$RUNNER_TEMP/miscuentas-src"
             unzip -q "$ZIP_FILE" -d "$RUNNER_TEMP/miscuentas-src"
             mapfile -t FILES < <(find "$RUNNER_TEMP/miscuentas-src" -type f -path '*/app/build.gradle' -print)
@@ -64,14 +64,14 @@ jobs:
           fi
           echo "PROJECT_DIR=$PROJECT" >> "$GITHUB_ENV"
 
-      - name: Validar versión, widget y GIF
+      - name: Validar versión, widget y GIF animado
         shell: bash
         run: |
           set -euo pipefail
           cd "$PROJECT_DIR"
-          grep -Eq 'versionCode[[:space:]]+50([[:space:]]|$)' app/build.gradle
-          grep -Fq 'versionName "1.9.24"' app/build.gradle
-          grep -Fq 'MisCuentas 1.9.24' app/src/main/AndroidManifest.xml
+          grep -Eq 'versionCode[[:space:]]+51([[:space:]]|$)' app/build.gradle
+          grep -Fq 'versionName "1.9.25"' app/build.gradle
+          grep -Fq 'MisCuentas 1.9.25' app/src/main/AndroidManifest.xml
           grep -Fq 'android:layout_width="88dp" android:layout_height="88dp"' app/src/main/res/layout/debt_widget.xml
           grep -Fq 'VoicePopupActivity.class' app/src/main/java/com/pau/miscuentas/DebtWidgetProvider.java
           python3 - <<'PY'
@@ -80,8 +80,8 @@ jobs:
           import re
           assets = Path('app/src/main/assets')
           im = Image.open(assets / 'chick_header_walk.gif')
-          if im.size != (539,177) or im.n_frames != 33:
-              raise SystemExit('La animación no conserva lienzo/fotogramas esperados')
+          if im.format != 'GIF' or im.size != (543,181) or im.n_frames != 16:
+              raise SystemExit('El GIF de cabecera no tiene las dimensiones/fotogramas esperados')
           html = (assets / 'index.html').read_text(encoding='utf-8')
           scripts = re.findall(r'<script[^>]*>(.*?)</script>', html, re.S | re.I)
           if not scripts:
@@ -98,11 +98,11 @@ jobs:
           gradle --no-daemon --stacktrace clean assembleDebug
 
       - name: Preparar APK
-        run: cp "$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk" "$GITHUB_WORKSPACE/MisCuentas-1.9.24-v50.apk"
+        run: cp "$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk" "$GITHUB_WORKSPACE/MisCuentas-1.9.25-v51.apk"
 
       - name: Publicar APK
         uses: actions/upload-artifact@v4
         with:
-          name: MisCuentas-1.9.24-v50
-          path: MisCuentas-1.9.24-v50.apk
+          name: MisCuentas-1.9.25-v51
+          path: MisCuentas-1.9.25-v51.apk
           if-no-files-found: error
