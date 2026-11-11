@@ -1,5 +1,5 @@
 
-name: Build MisCuentas 1.9.21
+name: Build MisCuentas 1.9.22
 
 on:
   workflow_dispatch:
@@ -27,69 +27,55 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Instalar Pillow para validar GIFs
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install Pillow
+      - name: Instalar Pillow
+        run: python -m pip install --upgrade pip Pillow
 
       - name: Configurar Android SDK
         uses: android-actions/setup-android@v4
         with:
           accept-android-sdk-licenses: true
 
-      - name: Instalar componentes Android necesarios
-        shell: bash
+      - name: Instalar componentes Android
         run: |
           set -euo pipefail
-          sdkmanager --install \
-            "platform-tools" \
-            "platforms;android-35" \
-            "build-tools;35.0.0"
+          sdkmanager --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
       - name: Instalar Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
-      - name: Extraer y localizar proyecto Android
+      - name: Localizar proyecto
         shell: bash
         run: |
           set -euo pipefail
-          ZIP_FILE="$GITHUB_WORKSPACE/MisCuentas_1.9.21.zip"
-
+          ZIP_FILE="$GITHUB_WORKSPACE/MisCuentas_1.9.22.zip"
           if [ -f "$GITHUB_WORKSPACE/app/build.gradle" ]; then
             PROJECT="$GITHUB_WORKSPACE"
           else
-            test -s "$ZIP_FILE" || {
-              echo "::error::No encuentro MisCuentas_1.9.21.zip en la raíz del repositorio."
-              exit 1
-            }
+            test -s "$ZIP_FILE" || { echo "::error::No encuentro MisCuentas_1.9.22.zip en la raíz"; exit 1; }
             mkdir -p "$RUNNER_TEMP/miscuentas-src"
             unzip -q "$ZIP_FILE" -d "$RUNNER_TEMP/miscuentas-src"
-            mapfile -t PROJECT_FILES < <(
-              find "$RUNNER_TEMP/miscuentas-src" -type f -path '*/app/build.gradle' -print
-            )
-            if [ "${#PROJECT_FILES[@]}" -ne 1 ]; then
-              echo "::error::El ZIP debe contener exactamente un app/build.gradle"
-              exit 1
-            fi
-            PROJECT="${PROJECT_FILES[0]%/app/build.gradle}"
+            mapfile -t FILES < <(find "$RUNNER_TEMP/miscuentas-src" -type f -path '*/app/build.gradle' -print)
+            [ "${#FILES[@]}" -eq 1 ] || { echo "::error::El ZIP debe contener un único app/build.gradle"; exit 1; }
+            PROJECT="${FILES[0]%/app/build.gradle}"
           fi
           echo "PROJECT_DIR=$PROJECT" >> "$GITHUB_ENV"
 
-      - name: Validar versión, JavaScript, GIFs y sonidos
+      - name: Validar versión, widgets, GIF y JavaScript
         shell: bash
         run: |
           set -euo pipefail
           cd "$PROJECT_DIR"
-          grep -Eq 'versionCode[[:space:]]+47([[:space:]]|$)' app/build.gradle
-          grep -Fq 'versionName "1.9.21"' app/build.gradle
-          grep -Fq 'MisCuentas 1.9.21' app/src/main/AndroidManifest.xml
+          grep -Eq 'versionCode[[:space:]]+48([[:space:]]|$)' app/build.gradle
+          grep -Fq 'versionName "1.9.22"' app/build.gradle
+          grep -Fq 'MisCuentas 1.9.22' app/src/main/AndroidManifest.xml
           test -s app/src/main/java/com/pau/miscuentas/VoiceWidgetProvider.java
-          test -s app/src/main/res/xml/voice_widget_info.xml
-          grep -Fq 'widget_debt_sphere' app/src/main/res/layout/debt_widget.xml
-          grep -Fq 'widget_voice_sphere' app/src/main/res/layout/voice_widget.xml
-
+          test -s app/src/main/java/com/pau/miscuentas/DebtWidgetProvider.java
+          test -s app/src/main/res/layout/debt_widget.xml
+          test -s app/src/main/res/layout/voice_widget.xml
+          grep -Fq '.VoiceWidgetProvider' app/src/main/AndroidManifest.xml
+          grep -Fq '.DebtWidgetProvider' app/src/main/AndroidManifest.xml
           python3 - <<'PY'
           import re
           from pathlib import Path
@@ -100,11 +86,11 @@ jobs:
           scripts = re.findall(r'<script[^>]*>(.*?)</script>', html, re.S | re.I)
           if not scripts:
               raise SystemExit('No se encontraron scripts JavaScript')
-          Path('/tmp/miscuentas-1.9.21.js').write_text('\n'.join(scripts), encoding='utf-8')
+          Path('/tmp/miscuentas-1.9.22.js').write_text('\n'.join(scripts), encoding='utf-8')
 
           required = {
               'miscuentas_splash.gif': 6,
-              'chick_header_walk.gif': 30,
+              'chick_header_walk.gif': 20,
               'mascot_sale_notebook.gif': 12,
               'mascot_payment_backpack.gif': 12,
           }
@@ -115,33 +101,27 @@ jobs:
               im = Image.open(path)
               if getattr(im, 'n_frames', 1) < minimum:
                   raise SystemExit(f'{name} necesita al menos {minimum} fotogramas')
-              if name != 'miscuentas_splash.gif':
-                  im.seek(0)
-                  if im.convert('RGBA').getchannel('A').getextrema()[0] != 0:
-                      raise SystemExit(f'{name} no conserva transparencia real')
+              if name == 'chick_header_walk.gif':
+                  if im.size != (539, 177) or im.info.get('transparency') is None:
+                      raise SystemExit('La animación de cabecera debe medir 539x177 y tener transparencia')
           PY
-
-          node --check /tmp/miscuentas-1.9.21.js
+          node --check /tmp/miscuentas-1.9.22.js
           test -s app/src/main/assets/sounds/pencil-writing-02.mp3
           test -s app/src/main/assets/sounds/office-cash-register-12.mp3
 
-      - name: Compilar APK 1.9.21
+      - name: Compilar APK
         shell: bash
         run: |
           set -euo pipefail
           cd "$PROJECT_DIR"
           gradle --no-daemon --stacktrace clean assembleDebug
 
-      - name: Preparar APK con nombre de versión
-        shell: bash
-        run: |
-          set -euo pipefail
-          cp "$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk" \
-            "$GITHUB_WORKSPACE/MisCuentas-1.9.21-v47.apk"
+      - name: Preparar APK
+        run: cp "$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk" "$GITHUB_WORKSPACE/MisCuentas-1.9.22-v48.apk"
 
       - name: Publicar APK
         uses: actions/upload-artifact@v4
         with:
-          name: MisCuentas-1.9.21-v47
-          path: MisCuentas-1.9.21-v47.apk
+          name: MisCuentas-1.9.22-v48
+          path: MisCuentas-1.9.22-v48.apk
           if-no-files-found: error
